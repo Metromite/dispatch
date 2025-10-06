@@ -7,7 +7,7 @@
 }
 
 body {
-  background: url('background.jpg') no-repeat center center fixed; /* your background image */
+  background: url('background.jpg') no-repeat center center fixed; /* replace with your image */
   background-size: cover;
   min-height: 100vh;
   color: #fff;
@@ -32,17 +32,20 @@ h1 {
   max-width: 1200px;
 }
 
-/* ================= Zone Lists ================= */
-.zone-list, .dispatched {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 20px;
-  padding: 15px;
+/* ================= Lists ================= */
+.zone-list, .dispatched, .gates-container {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.zone-list, .dispatched {
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 20px;
+  padding: 15px;
   min-height: 150px;
 }
 
@@ -55,7 +58,7 @@ h1 {
   text-shadow: 0 1px 5px rgba(0,0,0,0.4);
 }
 
-/* ================= Zone Items ================= */
+/* ================= Zones ================= */
 .zone {
   background: rgba(255,255,255,0.25);
   backdrop-filter: blur(15px);
@@ -89,19 +92,17 @@ h1 {
   border-color: rgba(200, 200, 200, 0.5);
 }
 
-/* ================= Gate/Bay Containers ================= */
+/* ================= Bays ================= */
 .gates-container {
-  display: flex;
   gap: 20px;
   flex-wrap: wrap;
-  justify-content: center;
 }
 
 .gate {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255,255,255,0.15);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255,255,255,0.3);
   border-radius: 20px;
   width: 220px;
   min-height: 180px;
@@ -109,7 +110,6 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: all 0.2s ease;
 }
 
 .gate h3 {
@@ -119,24 +119,21 @@ h1 {
   text-shadow: 0 1px 5px rgba(0,0,0,0.5);
 }
 
-/* ================= Timer & Dispatched Text ================= */
+/* ================= Timer & Dispatched ================= */
 .gate-timer, .dispatched-time {
   font-size: 0.85rem;
   margin-top: 5px;
-  color: #ffd700; /* gold for visibility */
+  color: #ffd700; /* gold */
   text-align: center;
 }
 
 .dispatched-time {
-  color: #aaa; /* grey for dispatched zones */
+  color: #aaa;
 }
 
 /* ================= Hover Effects ================= */
-.zone:hover {
-  transform: scale(1.05);
+.zone:hover, .gate:hover, .zone-list:hover, .dispatched:hover {
+  transform: scale(1.02);
   box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-
-.gate:hover, .zone-list:hover, .dispatched:hover {
   border-color: rgba(255,255,255,0.6);
 }
