@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dispatch Controller</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="background"></div>
+  <h1>Dispatch Controller</h1>
+
+  <div class="container">
+    <div class="zone-list" id="zoneList">
+      <h3>Waiting Zones</h3>
+      <div class="zone waiting" draggable="true" id="Fujairah">Fujairah</div>
+      <div class="zone waiting" draggable="true" id="RasAlKhaimah">Ras Al Khaimah</div>
+      <div class="zone waiting" draggable="true" id="JabalAli">Jabal Ali</div>
+      <div class="zone waiting" draggable="true" id="AlQuoz2">Al Quoz 2</div>
+      <div class="zone waiting" draggable="true" id="AlQuoz1">Al Quoz 1</div>
+      <div class="zone waiting" draggable="true" id="Mirdiff">Mirdiff</div>
+      <div class="zone waiting" draggable="true" id="BurDubai">Bur Dubai</div>
+      <div class="zone waiting" draggable="true" id="SharjahBuhairah">Sharjah-Buhairah</div>
+      <div class="zone waiting" draggable="true" id="Jumeirah">Jumeirah</div>
+      <div class="zone waiting" draggable="true" id="AlQusais">Al Qusais</div>
+      <div class="zone waiting" draggable="true" id="Deira">Deira</div>
+      <div class="zone waiting" draggable="true" id="Ajman">Ajman</div>
+      <div class="zone waiting" draggable="true" id="SharjahSanayia">Sharjah-Sanayia</div>
+    </div>
+
+    <div class="gates-container">
+      <div class="gate" id="gate2"><h3>Gate 2</h3></div>
+      <div class="gate" id="gate3"><h3>Gate 3</h3></div>
+      <div class="gate" id="gate4"><h3>Gate 4</h3></div>
+    </div>
+
+    <div class="dispatched" id="dispatched">
+      <h3>Dispatched Zones</h3>
+    </div>
+  </div>
+
+  <!-- Firebase SDKs (non-module to keep drag/drop behavior) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.3/firebase-database-compat.js"></script>
+
+  <!-- Your logic -->
+  <script src="script.js"></script>
+</body>
+</html>
