@@ -1,4 +1,4 @@
-// Firebase setup (compat SDK)
+// ================= Firebase Setup =================
 const firebaseConfig = {
   apiKey: "AIzaSyA9n5lGdlNkgMmC570jArJwKY5P2c_XkcY",
   authDomain: "dispatchsystem-23f47.firebaseapp.com",
@@ -12,12 +12,13 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// ================= Select DOM Elements =================
 const zones = document.querySelectorAll(".zone");
 const gates = document.querySelectorAll(".gate");
 const dispatchedArea = document.getElementById("dispatched");
 const waitingArea = document.getElementById("zoneList");
 
-// Drag & Drop (same as before)
+// ================= Drag & Drop =================
 zones.forEach(zone => {
   zone.addEventListener("dragstart", e => {
     e.dataTransfer.setData("text/plain", zone.id);
@@ -36,24 +37,30 @@ zones.forEach(zone => {
   });
 });
 
-// Function to move zone locally and update Firebase
+// ================= Move Zone Function =================
 function moveZone(zone, targetArea) {
+  // Stop old timer if exists
   if (zone.dataset.interval) {
     clearInterval(zone.dataset.interval);
     delete zone.dataset.interval;
   }
 
+  // Remove old classes/timers
   zone.classList.remove("in-gate", "dispatched", "waiting");
   const oldTimer = zone.querySelector(".gate-timer");
   if (oldTimer) oldTimer.remove();
   const oldDispatch = zone.querySelector(".dispatched-time");
   if (oldDispatch) oldDispatch.remove();
 
+  // Move element in DOM
   targetArea.appendChild(zone);
 
   const now = new Date();
+
+  // ================= Gate =================
   if (targetArea.classList.contains("gate")) {
     zone.classList.add("in-gate");
+
     const timerDisplay = document.createElement("span");
     timerDisplay.classList.add("gate-timer");
     zone.appendChild(timerDisplay);
@@ -74,6 +81,8 @@ function moveZone(zone, targetArea) {
       startTime: start.toISOString()
     });
   }
+
+  // ================= Dispatched =================
   else if (targetArea.id === "dispatched") {
     zone.classList.add("dispatched");
     const label = document.createElement("span");
@@ -86,6 +95,8 @@ function moveZone(zone, targetArea) {
       dispatchedTime: now.toISOString()
     });
   }
+
+  // ================= Waiting =================
   else if (targetArea.id === "zoneList") {
     zone.classList.add("waiting");
     db.ref("dispatch/" + zone.id).set({
@@ -95,7 +106,7 @@ function moveZone(zone, targetArea) {
   }
 }
 
-// ================= Real-time listener =================
+// ================= Real-time Listener =================
 db.ref("dispatch").on("value", snapshot => {
   const data = snapshot.val();
   if (!data) return;
@@ -105,27 +116,26 @@ db.ref("dispatch").on("value", snapshot => {
     const zone = document.getElementById(zoneId);
     if (!zone) return;
 
-    // Prevent double timers
+    // Stop old timer if exists
     if (zone.dataset.interval) {
       clearInterval(zone.dataset.interval);
       delete zone.dataset.interval;
     }
 
-    // Remove old visual elements
+    // Remove old classes/timers
     zone.classList.remove("in-gate", "dispatched", "waiting");
     const oldTimer = zone.querySelector(".gate-timer");
     if (oldTimer) oldTimer.remove();
     const oldDispatch = zone.querySelector(".dispatched-time");
     if (oldDispatch) oldDispatch.remove();
 
-    // Move zone according to status
+    // Move zones based on status
     if (zoneData.status === "in-gate") {
       const gate = document.getElementById(zoneData.gate);
       if (!gate) return;
       gate.appendChild(zone);
       zone.classList.add("in-gate");
 
-      // Recreate timer in minutes
       const timerDisplay = document.createElement("span");
       timerDisplay.classList.add("gate-timer");
       zone.appendChild(timerDisplay);
@@ -138,8 +148,7 @@ db.ref("dispatch").on("value", snapshot => {
         timerDisplay.textContent = `⏱ ${minutes}m ${seconds}s`;
       }, 1000);
       zone.dataset.interval = interval;
-    }
-    else if (zoneData.status === "dispatched") {
+    } else if (zoneData.status === "dispatched") {
       dispatchedArea.appendChild(zone);
       zone.classList.add("dispatched");
       const label = document.createElement("span");
@@ -147,8 +156,7 @@ db.ref("dispatch").on("value", snapshot => {
       const t = zoneData.dispatchedTime ? new Date(zoneData.dispatchedTime).toLocaleTimeString() : new Date().toLocaleTimeString();
       label.textContent = `(Dispatched at: ${t})`;
       zone.appendChild(label);
-    }
-    else if (zoneData.status === "waiting") {
+    } else if (zoneData.status === "waiting") {
       waitingArea.appendChild(zone);
       zone.classList.add("waiting");
     }
