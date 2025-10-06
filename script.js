@@ -1,4 +1,4 @@
-// ================= Firebase Setup =================
+// Firebase setup (compat SDK)
 const firebaseConfig = {
   apiKey: "AIzaSyA9n5lGdlNkgMmC570jArJwKY5P2c_XkcY",
   authDomain: "dispatchsystem-23f47.firebaseapp.com",
@@ -9,17 +9,15 @@ const firebaseConfig = {
   appId: "1:131590857859:web:5959b6d9d9655fdd0ba7b6",
   measurementId: "G-49GJE4J123"
 };
-
-// Initialize Firebase (compat SDK behaves like normal scripts)
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ================= Drag & Drop Logic (like original) =================
 const zones = document.querySelectorAll(".zone");
 const gates = document.querySelectorAll(".gate");
 const dispatchedArea = document.getElementById("dispatched");
 const waitingArea = document.getElementById("zoneList");
 
+// Drag & Drop (same as before)
 zones.forEach(zone => {
   zone.addEventListener("dragstart", e => {
     e.dataTransfer.setData("text/plain", zone.id);
@@ -34,30 +32,105 @@ zones.forEach(zone => {
     const zone = document.getElementById(zoneId);
     if (!zone) return;
 
-    // Stop any running timer
+    moveZone(zone, area);
+  });
+});
+
+// Function to move zone locally and update Firebase
+function moveZone(zone, targetArea) {
+  if (zone.dataset.interval) {
+    clearInterval(zone.dataset.interval);
+    delete zone.dataset.interval;
+  }
+
+  zone.classList.remove("in-gate", "dispatched", "waiting");
+  const oldTimer = zone.querySelector(".gate-timer");
+  if (oldTimer) oldTimer.remove();
+  const oldDispatch = zone.querySelector(".dispatched-time");
+  if (oldDispatch) oldDispatch.remove();
+
+  targetArea.appendChild(zone);
+
+  const now = new Date();
+  if (targetArea.classList.contains("gate")) {
+    zone.classList.add("in-gate");
+    const timerDisplay = document.createElement("span");
+    timerDisplay.classList.add("gate-timer");
+    zone.appendChild(timerDisplay);
+
+    const start = now;
+    const interval = setInterval(() => {
+      const diff = Math.floor((new Date() - start) / 1000);
+      const minutes = Math.floor(diff / 60);
+      const seconds = diff % 60;
+      timerDisplay.textContent = `⏱ ${minutes}m ${seconds}s`;
+    }, 1000);
+    zone.dataset.interval = interval;
+
+    db.ref("dispatch/" + zone.id).set({
+      zone: zone.id,
+      status: "in-gate",
+      gate: targetArea.id,
+      startTime: start.toISOString()
+    });
+  }
+  else if (targetArea.id === "dispatched") {
+    zone.classList.add("dispatched");
+    const label = document.createElement("span");
+    label.classList.add("dispatched-time");
+    label.textContent = `(Dispatched at: ${now.toLocaleTimeString()})`;
+    zone.appendChild(label);
+
+    db.ref("dispatch/" + zone.id).update({
+      status: "dispatched",
+      dispatchedTime: now.toISOString()
+    });
+  }
+  else if (targetArea.id === "zoneList") {
+    zone.classList.add("waiting");
+    db.ref("dispatch/" + zone.id).set({
+      zone: zone.id,
+      status: "waiting"
+    });
+  }
+}
+
+// ================= Real-time listener =================
+db.ref("dispatch").on("value", snapshot => {
+  const data = snapshot.val();
+  if (!data) return;
+
+  Object.keys(data).forEach(zoneId => {
+    const zoneData = data[zoneId];
+    const zone = document.getElementById(zoneId);
+    if (!zone) return;
+
+    // Prevent double timers
     if (zone.dataset.interval) {
       clearInterval(zone.dataset.interval);
       delete zone.dataset.interval;
     }
 
-    // Reset visuals
+    // Remove old visual elements
     zone.classList.remove("in-gate", "dispatched", "waiting");
     const oldTimer = zone.querySelector(".gate-timer");
     if (oldTimer) oldTimer.remove();
-    const oldDispatched = zone.querySelector(".dispatched-time");
-    if (oldDispatched) oldDispatched.remove();
+    const oldDispatch = zone.querySelector(".dispatched-time");
+    if (oldDispatch) oldDispatch.remove();
 
-    // Move element
-    e.currentTarget.appendChild(zone);
-
-    // Gate logic
-    if (e.currentTarget.classList.contains("gate")) {
+    // Move zone according to status
+    if (zoneData.status === "in-gate") {
+      const gate = document.getElementById(zoneData.gate);
+      if (!gate) return;
+      gate.appendChild(zone);
       zone.classList.add("in-gate");
+
+      // Recreate timer in minutes
       const timerDisplay = document.createElement("span");
       timerDisplay.classList.add("gate-timer");
       zone.appendChild(timerDisplay);
 
-      const start = new Date();
+      const start = new Date(zoneData.startTime);
       const interval = setInterval(() => {
         const diff = Math.floor((new Date() - start) / 1000);
         const minutes = Math.floor(diff / 60);
@@ -65,37 +138,19 @@ zones.forEach(zone => {
         timerDisplay.textContent = `⏱ ${minutes}m ${seconds}s`;
       }, 1000);
       zone.dataset.interval = interval;
-
-      db.ref("dispatch/" + zone.id).set({
-        zone: zone.id,
-        status: "in-gate",
-        gate: e.currentTarget.id,
-        startTime: start.toISOString()
-      });
     }
-
-    // Dispatched
-    else if (e.currentTarget.id === "dispatched") {
+    else if (zoneData.status === "dispatched") {
+      dispatchedArea.appendChild(zone);
       zone.classList.add("dispatched");
-      const now = new Date();
       const label = document.createElement("span");
       label.classList.add("dispatched-time");
-      label.textContent = `(Dispatched at: ${now.toLocaleTimeString()})`;
+      const t = zoneData.dispatchedTime ? new Date(zoneData.dispatchedTime).toLocaleTimeString() : new Date().toLocaleTimeString();
+      label.textContent = `(Dispatched at: ${t})`;
       zone.appendChild(label);
-
-      db.ref("dispatch/" + zone.id).update({
-        status: "dispatched",
-        dispatchedTime: now.toISOString()
-      });
     }
-
-    // Waiting
-    else if (e.currentTarget.id === "zoneList") {
+    else if (zoneData.status === "waiting") {
+      waitingArea.appendChild(zone);
       zone.classList.add("waiting");
-      db.ref("dispatch/" + zone.id).set({
-        zone: zone.id,
-        status: "waiting"
-      });
     }
   });
 });
