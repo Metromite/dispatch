@@ -9,6 +9,7 @@ const firebaseConfig = {
   appId: "1:131590857859:web:5959b6d9d9655fdd0ba7b6",
   measurementId: "G-49GJE4J123"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
@@ -38,23 +39,24 @@ zones.forEach(zone => {
 
 // ================= Move Zone Function =================
 function moveZone(zone, targetArea) {
+  // Stop any running timer
   if (zone.dataset.interval) {
     clearInterval(zone.dataset.interval);
     delete zone.dataset.interval;
   }
 
+  // Remove previous UI parts
   zone.classList.remove("in-gate", "dispatched", "waiting");
-  const oldTimer = zone.querySelector(".gate-timer");
-  if (oldTimer) oldTimer.remove();
-  const oldDispatch = zone.querySelector(".dispatched-time");
-  if (oldDispatch) oldDispatch.remove();
+  zone.querySelectorAll(".gate-timer, .dispatched-time").forEach(el => el.remove());
 
+  // Move visually
   targetArea.appendChild(zone);
-
   const now = new Date();
 
+  // ----- If moved to gate -----
   if (targetArea.classList.contains("gate")) {
     zone.classList.add("in-gate");
+
     const timerDisplay = document.createElement("span");
     timerDisplay.classList.add("gate-timer");
     zone.appendChild(timerDisplay);
@@ -74,7 +76,10 @@ function moveZone(zone, targetArea) {
       gate: targetArea.id,
       startTime: start.toISOString()
     });
-  } else if (targetArea.id === "dispatched") {
+  }
+
+  // ----- If moved to dispatched -----
+  else if (targetArea.id === "dispatched") {
     zone.classList.add("dispatched");
     const label = document.createElement("span");
     label.classList.add("dispatched-time");
@@ -85,7 +90,10 @@ function moveZone(zone, targetArea) {
       status: "dispatched",
       dispatchedTime: now.toISOString()
     });
-  } else if (targetArea.id === "zoneList") {
+  }
+
+  // ----- If moved back to waiting -----
+  else if (targetArea.id === "zoneList") {
     zone.classList.add("waiting");
     db.ref("dispatch/" + zone.id).set({
       zone: zone.id,
@@ -104,17 +112,15 @@ db.ref("dispatch").on("value", snapshot => {
     const zone = document.getElementById(zoneId);
     if (!zone) return;
 
+    // Reset old visuals
     if (zone.dataset.interval) {
       clearInterval(zone.dataset.interval);
       delete zone.dataset.interval;
     }
-
     zone.classList.remove("in-gate", "dispatched", "waiting");
-    const oldTimer = zone.querySelector(".gate-timer");
-    if (oldTimer) oldTimer.remove();
-    const oldDispatch = zone.querySelector(".dispatched-time");
-    if (oldDispatch) oldDispatch.remove();
+    zone.querySelectorAll(".gate-timer, .dispatched-time").forEach(el => el.remove());
 
+    // ----- Restore state -----
     if (zoneData.status === "in-gate") {
       const gate = document.getElementById(zoneData.gate);
       if (!gate) return;
@@ -133,7 +139,8 @@ db.ref("dispatch").on("value", snapshot => {
         timerDisplay.textContent = `⏱ ${minutes}m ${seconds}s`;
       }, 1000);
       zone.dataset.interval = interval;
-    } else if (zoneData.status === "dispatched") {
+    } 
+    else if (zoneData.status === "dispatched") {
       dispatchedArea.appendChild(zone);
       zone.classList.add("dispatched");
       const label = document.createElement("span");
@@ -141,7 +148,8 @@ db.ref("dispatch").on("value", snapshot => {
       const t = zoneData.dispatchedTime ? new Date(zoneData.dispatchedTime).toLocaleTimeString() : new Date().toLocaleTimeString();
       label.textContent = `(Dispatched at: ${t})`;
       zone.appendChild(label);
-    } else if (zoneData.status === "waiting") {
+    } 
+    else if (zoneData.status === "waiting") {
       waitingArea.appendChild(zone);
       zone.classList.add("waiting");
     }
