@@ -1,7 +1,7 @@
 // ================= Firebase Setup =================
 const firebaseConfig = {
   apiKey: "AIzaSyA9n5lGdlNkgMmC570jArJwKY5P2c_XkcY",
-  authDomain: "dispatchsystem-23f47.firebaseapp.com",
+  authDomain: "https://dispatchsystem-23f47-default-rtdb.firebaseio.com",
   databaseURL: "https://dispatchsystem-23f47-default-rtdb.firebaseio.com",
   projectId: "dispatchsystem-23f47",
   storageBucket: "dispatchsystem-23f47.firebasestorage.app",
@@ -147,3 +147,4 @@ db.ref("dispatch").on("value", snapshot => {
     }
   });
 });
+
