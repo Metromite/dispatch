@@ -9,11 +9,10 @@ const firebaseConfig = {
   appId: "1:131590857859:web:5959b6d9d9655fdd0ba7b6",
   measurementId: "G-49GJE4J123"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ================= DOM Elements =================
+// ================= Select DOM Elements =================
 const zones = document.querySelectorAll(".zone");
 const gates = document.querySelectorAll(".gate");
 const dispatchedArea = document.getElementById("dispatched");
@@ -39,13 +38,11 @@ zones.forEach(zone => {
 
 // ================= Move Zone Function =================
 function moveZone(zone, targetArea) {
-  // stop existing timer
   if (zone.dataset.interval) {
     clearInterval(zone.dataset.interval);
     delete zone.dataset.interval;
   }
 
-  // cleanup visuals
   zone.classList.remove("in-gate", "dispatched", "waiting");
   const oldTimer = zone.querySelector(".gate-timer");
   if (oldTimer) oldTimer.remove();
@@ -53,6 +50,7 @@ function moveZone(zone, targetArea) {
   if (oldDispatch) oldDispatch.remove();
 
   targetArea.appendChild(zone);
+
   const now = new Date();
 
   if (targetArea.classList.contains("gate")) {
@@ -96,7 +94,7 @@ function moveZone(zone, targetArea) {
   }
 }
 
-// ================= Real-time Sync =================
+// ================= Real-time Listener =================
 db.ref("dispatch").on("value", snapshot => {
   const data = snapshot.val();
   if (!data) return;
@@ -140,9 +138,7 @@ db.ref("dispatch").on("value", snapshot => {
       zone.classList.add("dispatched");
       const label = document.createElement("span");
       label.classList.add("dispatched-time");
-      const t = zoneData.dispatchedTime
-        ? new Date(zoneData.dispatchedTime).toLocaleTimeString()
-        : new Date().toLocaleTimeString();
+      const t = zoneData.dispatchedTime ? new Date(zoneData.dispatchedTime).toLocaleTimeString() : new Date().toLocaleTimeString();
       label.textContent = `(Dispatched at: ${t})`;
       zone.appendChild(label);
     } else if (zoneData.status === "waiting") {
