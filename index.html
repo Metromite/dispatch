@@ -2,54 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Dispatch Controller</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dispatch System - Glass UI</title>
   <link rel="stylesheet" href="style.css">
-
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
-
   <div class="background"></div>
 
-  <h1>Dispatch Controller</h1>
+  <h1>Dispatch Control System</h1>
 
   <div class="container">
-
     <!-- Pending Zones -->
-    <div class="zone-list" id="pendingZones">
+    <div class="zone-list">
       <h3>Pending Zones</h3>
-      <div class="zone waiting" draggable="true" id="Fujairah">Fujairah</div>
-      <div class="zone waiting" draggable="true" id="RasAlKhaimah">Ras Al Khaimah</div>
-      <div class="zone waiting" draggable="true" id="JabalAli">Jabal Ali</div>
-      <div class="zone waiting" draggable="true" id="AlQuoz2">Al Quoz 2</div>
-      <div class="zone waiting" draggable="true" id="AlQuoz1">Al Quoz 1</div>
-      <div class="zone waiting" draggable="true" id="Mirdiff">Mirdiff</div>
-      <div class="zone waiting" draggable="true" id="BurDubai">Bur Dubai</div>
-      <div class="zone waiting" draggable="true" id="SharjahBuhairah">Sharjah-Buhairah</div>
-      <div class="zone waiting" draggable="true" id="Jumeirah">Jumeirah</div>
-      <div class="zone waiting" draggable="true" id="AlQusais">Al Qusais</div>
-      <div class="zone waiting" draggable="true" id="Deira">Deira</div>
-      <div class="zone waiting" draggable="true" id="Ajman">Ajman</div>
-      <div class="zone waiting" draggable="true" id="SharjahSanayia">Sharjah-Sanayia</div>
+      <div id="pendingZones"></div>
     </div>
 
     <!-- Bays -->
     <div class="bays-container">
-      <div class="bay" id="bay1"><h3>Bay 1</h3></div>
-      <div class="bay" id="bay2"><h3>Bay 2</h3></div>
-      <div class="bay" id="bay3"><h3>Bay 3</h3></div>
-      <div class="bay" id="bay4"><h3>Bay 4</h3></div>
+      <h3>Bays</h3>
+      <div class="bay" id="bay1"><h4>Bay 1</h4></div>
+      <div class="bay" id="bay2"><h4>Bay 2</h4></div>
+      <div class="bay" id="bay3"><h4>Bay 3</h4></div>
+      <div class="bay" id="bay4"><h4>Bay 4</h4></div>
     </div>
 
     <!-- Dispatched -->
-    <div class="dispatched" id="dispatched">
+    <div class="dispatched">
       <h3>Dispatched Zones</h3>
+      <div id="dispatchedZones"></div>
     </div>
-
   </div>
 
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
