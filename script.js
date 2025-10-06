@@ -32,35 +32,29 @@ zones.forEach(zone => {
     const zoneId = e.dataTransfer.getData("text/plain");
     const zone = document.getElementById(zoneId);
     if (!zone) return;
-
     moveZone(zone, area);
   });
 });
 
 // ================= Move Zone Function =================
 function moveZone(zone, targetArea) {
-  // Stop old timer if exists
   if (zone.dataset.interval) {
     clearInterval(zone.dataset.interval);
     delete zone.dataset.interval;
   }
 
-  // Remove old classes/timers
   zone.classList.remove("in-gate", "dispatched", "waiting");
   const oldTimer = zone.querySelector(".gate-timer");
   if (oldTimer) oldTimer.remove();
   const oldDispatch = zone.querySelector(".dispatched-time");
   if (oldDispatch) oldDispatch.remove();
 
-  // Move element in DOM
   targetArea.appendChild(zone);
 
   const now = new Date();
 
-  // ================= Gate =================
   if (targetArea.classList.contains("gate")) {
     zone.classList.add("in-gate");
-
     const timerDisplay = document.createElement("span");
     timerDisplay.classList.add("gate-timer");
     zone.appendChild(timerDisplay);
@@ -80,10 +74,7 @@ function moveZone(zone, targetArea) {
       gate: targetArea.id,
       startTime: start.toISOString()
     });
-  }
-
-  // ================= Dispatched =================
-  else if (targetArea.id === "dispatched") {
+  } else if (targetArea.id === "dispatched") {
     zone.classList.add("dispatched");
     const label = document.createElement("span");
     label.classList.add("dispatched-time");
@@ -94,10 +85,7 @@ function moveZone(zone, targetArea) {
       status: "dispatched",
       dispatchedTime: now.toISOString()
     });
-  }
-
-  // ================= Waiting =================
-  else if (targetArea.id === "zoneList") {
+  } else if (targetArea.id === "zoneList") {
     zone.classList.add("waiting");
     db.ref("dispatch/" + zone.id).set({
       zone: zone.id,
@@ -116,20 +104,17 @@ db.ref("dispatch").on("value", snapshot => {
     const zone = document.getElementById(zoneId);
     if (!zone) return;
 
-    // Stop old timer if exists
     if (zone.dataset.interval) {
       clearInterval(zone.dataset.interval);
       delete zone.dataset.interval;
     }
 
-    // Remove old classes/timers
     zone.classList.remove("in-gate", "dispatched", "waiting");
     const oldTimer = zone.querySelector(".gate-timer");
     if (oldTimer) oldTimer.remove();
     const oldDispatch = zone.querySelector(".dispatched-time");
     if (oldDispatch) oldDispatch.remove();
 
-    // Move zones based on status
     if (zoneData.status === "in-gate") {
       const gate = document.getElementById(zoneData.gate);
       if (!gate) return;
