@@ -153,7 +153,7 @@ body{
           <div class="panel-pop" id="activityPanel" data-anchor="activity" aria-hidden="true">
             <h4>Activity</h4>
             <div style="font-size:13px;color:#ddd;" id="activityContent">No recent activity yet.</div>
-            <div style="display:flex;justify-content:flex-end;margin-top:10px;gap:8px">
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
               <button class="btn" id="clearActivityBtn">Clear</button>
               <button class="btn" id="closeActivityPanelBtn">Close</button>
             </div>
@@ -266,7 +266,6 @@ try {
   console.error('Firebase init error', e);
   var db = null;
 }
-let __applyingRemote = false;
 
 /* -------------------------
    Configuration
@@ -320,7 +319,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if(!snap.exists()) return;
       try {
         const remote = snap.val();
-        __applyingRemote = true;
         // apply remote state to local state (replace)
         // keep BOT_TOKEN stored locally (not in firebase)
         Object.keys(state).forEach(k => delete state[k]);
@@ -331,8 +329,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.info('State updated from Firebase');
       } catch(e){
         console.error('Error applying remote state', e);
-      } finally {
-        __applyingRemote = false;
       }
     });
   }
@@ -526,7 +522,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderCounters(){
     list1.innerHTML = ''; list2.innerHTML = '';
-
     const renderEntry = (container, a, counterName)=>{
       const e = document.createElement('div');
       e.className='entry';
@@ -535,42 +530,32 @@ document.addEventListener('DOMContentLoaded', () => {
       const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === a.zid);
       const helper = helperId ? state.helpers[helperId] : null;
       const helperLine = helper ? `<div style="font-size:12px;color:#ddd;margin-top:4px">${helper.name} · ${helper.phone}</div>` : '';
-
+      const leftHtml = `<div><div><strong>${zoneName}</strong> — Token ${a.seq}</div>${helperLine}</div>`;
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn';
+      removeBtn.style.background = 'var(--danger)';
+      removeBtn.style.minWidth = '32px';
+      removeBtn.style.padding = '6px 10px';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove';
+      removeBtn.addEventListener('click', ()=>{
+        const list = state.counters[counterName] || [];
+        const idx = list.findIndex(x => x.seq === a.seq && x.zid === a.zid);
+        if(idx > -1){
+          list.splice(idx,1);
+          state.activity.push(`${new Date().toLocaleString()} — ${zoneName} token ${a.seq} removed from ${counterName}`);
+          renderAll();
+        }
+      });
+      e.innerHTML = '';
       const left = document.createElement('div');
-      left.innerHTML = `<div><strong>${zoneName}</strong> — Token ${a.seq}</div>${helperLine}`;
-
-      const right = document.createElement('div');
-      const rm = document.createElement('button');
-      rm.className = 'btn';
-      rm.title = 'Remove';
-      rm.textContent = '×';
-      rm.addEventListener('click', ()=> removeFromCounter(counterName, a.seq));
-      right.appendChild(rm);
-
-      e.style.display = 'flex';
-      e.style.justifyContent = 'space-between';
-      e.style.alignItems = 'center';
+      left.innerHTML = leftHtml;
       e.appendChild(left);
-      e.appendChild(right);
+      e.appendChild(removeBtn);
       container.appendChild(e);
     };
-
     state.counters.counter1.forEach(a=> renderEntry(list1, a, 'counter1'));
     state.counters.counter2.forEach(a=> renderEntry(list2, a, 'counter2'));
-  }
-
-  function removeFromCounter(counterName, seq){
-    const idx = state.counters[counterName].findIndex(e=> e.seq === seq);
-    if(idx > -1){
-      const entry = state.counters[counterName][idx];
-      state.counters[counterName].splice(idx,1);
-      // activity: only log remove
-      const zn = state.zones[entry.zid]?.name || entry.zid;
-      state.activity.push(`${new Date().toLocaleString()} — ${zn} token ${entry.seq} removed from ${counterName}`);
-      renderCounters();
-      renderActivity();
-      try { saveToFirebase(); } catch(e){ console.error('removeFromCounter saveToFirebase', e); }
-    }
   }
 
   function renderActivity(){
@@ -588,9 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCounters();
     renderActivity();
     // save to firebase for persistence & real-time sync
-    if(!__applyingRemote){
-      try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
-    }
+    try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
   }
 
   /* -------------------------
@@ -648,12 +631,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('closeEditPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
   document.getElementById('closeExportPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
   document.getElementById('closeActivityPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
-  document.getElementById('clearActivityBtn').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    state.activity = [];
-    renderActivity();
-    try { saveToFirebase(); } catch(e2){ console.error('clearActivity saveToFirebase', e2); }
-  });
+  const clearActivityBtn = document.getElementById('clearActivityBtn');
+  clearActivityBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); state.activity = []; renderActivity(); try { saveToFirebase(); } catch(_){} });
 
   /* -------------------------
      Editor open from panel button (should NOT close panel)
@@ -728,6 +707,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function sendTelegramMessage(chatId, text){
     const url = `https://api.telegram.org/bot${encodeURIComponent(BOT_TOKEN)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
     const img = new Image();
+    img.onload = ()=>{};
+    img.onerror = ()=>{};
     img.src = url;
   }
 
@@ -792,13 +773,13 @@ document.addEventListener('DOMContentLoaded', () => {
       timestamp: new Date().toISOString()
     };
 
-    // activity: only log add
+    // push to activity log (only add/remove events are logged)
     state.activity.push(`${new Date().toLocaleString()} — ${payload.zone} token ${payload.token} added to ${payload.counter}`);
     renderActivity();
 
-    // Send Telegram message directly if possible (prepend helper name; otherwise unchanged)
+    // Send Telegram message directly if possible (no extra activity logs)
     if(helper && helper.telegramId && BOT_TOKEN){
-      const msg = `${helper.name} Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
+      const msg = `${helper.name} — Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
       sendTelegramMessage(helper.telegramId, msg);
     }
 
