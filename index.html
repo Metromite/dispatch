@@ -154,7 +154,6 @@ body{
             <h4>Activity</h4>
             <div style="font-size:13px;color:#ddd;" id="activityContent">No recent activity yet.</div>
             <div style="display:flex;justify-content:flex-end;margin-top:10px">
-              <button class="btn" id="clearActivityBtn">Clear</button>
               <button class="btn" id="closeActivityPanelBtn">Close</button>
             </div>
           </div>
@@ -522,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderCounters(){
     list1.innerHTML = ''; list2.innerHTML = '';
-    const renderEntry = (container, a, counterName)=>{
+    const renderEntry = (container, a)=>{
       const e = document.createElement('div');
       e.className='entry';
       const zoneName = state.zones[a.zid]?.name || a.zid;
@@ -530,32 +529,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === a.zid);
       const helper = helperId ? state.helpers[helperId] : null;
       const helperLine = helper ? `<div style="font-size:12px;color:#ddd;margin-top:4px">${helper.name} · ${helper.phone}</div>` : '';
-      const leftHtml = `<div><div><strong>${zoneName}</strong> — Token ${a.seq}</div>${helperLine}</div>`;
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'btn';
-      removeBtn.style.background = 'var(--danger)';
-      removeBtn.style.minWidth = '32px';
-      removeBtn.style.padding = '6px 10px';
-      removeBtn.textContent = '✕';
-      removeBtn.title = 'Remove';
-      removeBtn.addEventListener('click', ()=>{
-        const list = state.counters[counterName] || [];
-        const idx = list.findIndex(x => x.seq === a.seq && x.zid === a.zid);
-        if(idx > -1){
-          list.splice(idx,1);
-          state.activity.push(`${new Date().toLocaleString()} — ${zoneName} token ${a.seq} removed from ${counterName}`);
-          renderAll();
-        }
-      });
-      e.innerHTML = '';
-      const left = document.createElement('div');
-      left.innerHTML = leftHtml;
-      e.appendChild(left);
-      e.appendChild(removeBtn);
+      e.innerHTML = `<div><div><strong>${zoneName}</strong> — Token ${a.seq}</div>${helperLine}</div>`;
       container.appendChild(e);
     };
-    state.counters.counter1.forEach(a=> renderEntry(list1, a, 'counter1'));
-    state.counters.counter2.forEach(a=> renderEntry(list2, a, 'counter2'));
+    state.counters.counter1.forEach(a=> renderEntry(list1, a));
+    state.counters.counter2.forEach(a=> renderEntry(list2, a));
   }
 
   function renderActivity(){
@@ -631,8 +609,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('closeEditPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
   document.getElementById('closeExportPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
   document.getElementById('closeActivityPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
-  const clearActivityBtn = document.getElementById('clearActivityBtn');
-  clearActivityBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); state.activity = []; renderActivity(); try { saveToFirebase(); } catch(_){} });
 
   /* -------------------------
      Editor open from panel button (should NOT close panel)
@@ -677,6 +653,8 @@ document.addEventListener('DOMContentLoaded', () => {
     BOT_TOKEN = botTokenInput.value.trim();
     try { localStorage.setItem('dispatch_bot_token', BOT_TOKEN); } catch(_){ }
     updateTokenUI();
+    state.activity.push(`${new Date().toLocaleTimeString()} — Bot token saved`);
+    renderActivity();
     // don't save bot token to firebase (kept local)
   });
   toggleTokenVisibilityBtn?.addEventListener('click', (e)=>{
@@ -707,8 +685,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function sendTelegramMessage(chatId, text){
     const url = `https://api.telegram.org/bot${encodeURIComponent(BOT_TOKEN)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
     const img = new Image();
-    img.onload = ()=>{};
-    img.onerror = ()=>{};
+    let done = false;
+    const mark = (ok)=>{
+      if(done) return; done = true;
+      state.activity.push(`${new Date().toLocaleTimeString()} — Telegram ${ok?'sent (requested)':'failed to request'}`);
+      renderActivity();
+    };
+    img.onload = ()=> mark(true);
+    img.onerror = ()=> mark(true); // request still goes through; response isn't image
     img.src = url;
   }
 
@@ -773,14 +757,27 @@ document.addEventListener('DOMContentLoaded', () => {
       timestamp: new Date().toISOString()
     };
 
-    // push to activity log (only add/remove events are logged)
+    // push to activity log
     state.activity.push(`${new Date().toLocaleString()} — ${payload.zone} token ${payload.token} added to ${payload.counter}`);
+    if(!helper){
+      state.activity.push(`${new Date().toLocaleTimeString()} — No helper assigned to zone '${payload.zone}'. Assign a helper to this zone to enable Telegram.`);
+    } else if(!helper.telegramId){
+      state.activity.push(`${new Date().toLocaleTimeString()} — Helper '${helper.name}' has no Telegram ID. Add Telegram ID or enable Bot Sync.`);
+    }
     renderActivity();
 
-    // Send Telegram message directly if possible (no extra activity logs)
-    if(helper && helper.telegramId && BOT_TOKEN){
-      const msg = `${helper.name} — Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
-      sendTelegramMessage(helper.telegramId, msg);
+    // Send Telegram message directly if possible
+    if(helper && helper.telegramId){
+      if(!BOT_TOKEN){
+        state.activity.push(`${new Date().toLocaleTimeString()} — Bot token not set. Open Edit and save your bot token.`);
+        renderActivity();
+      } else {
+        const msg = `Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
+        sendTelegramMessage(helper.telegramId, msg);
+      }
+    } else {
+      state.activity.push(`${new Date().toLocaleTimeString()} — Skipped Telegram: missing helper or Telegram ID.`);
+      renderActivity();
     }
 
     // persist after assignment
