@@ -258,13 +258,23 @@ const firebaseConfig = {
   measurementId: "G-2FPWGR4KH2"
 };
 
+let db = null;
+let usingRestFallback = false;
+let restPollIntervalId = null;
+let realtimeConnected = false;
+const REST_POLL_MS = 3000;
+
+// convenience base URL for Realtime DB REST
+const RTDB_REST_BASE = (firebaseConfig.databaseURL || '').replace(/\/$/,'');
+
+/* initialize compat SDK and try to setup real-time */
 try {
   firebase.initializeApp(firebaseConfig);
-  var db = firebase.database();
-  console.info('Firebase initialized');
+  db = firebase.database();
+  console.info('Firebase initialized (compat)');
 } catch (e) {
   console.error('Firebase init error', e);
-  var db = null;
+  db = null;
 }
 
 /* -------------------------
@@ -299,40 +309,6 @@ document.addEventListener('DOMContentLoaded', () => {
     state.activity = Array.isArray(state.activity) ? state.activity : [];
   }
 
-  // Firebase helper functions (persist / load)
-  function saveToFirebase(){
-    if(!db) return;
-    try {
-      db.ref('dispatch_state').set(state).catch(err=> console.error('saveToFirebase error', err));
-    } catch(e){ console.error('saveToFirebase', e); }
-  }
-  function loadFromFirebaseOnce(){
-    if(!db) return Promise.resolve(null);
-    return db.ref('dispatch_state').once('value').then(snap=>{
-      if(!snap.exists()) return null;
-      return snap.val();
-    }).catch(e=> { console.error('loadFromFirebaseOnce', e); return null; });
-  }
-  // realtime listener: keep UI in sync if DB changes elsewhere
-  if(db){
-    db.ref('dispatch_state').on('value', snap=>{
-      if(!snap.exists()) return;
-      try {
-        const remote = snap.val();
-        // apply remote state to local state (replace)
-        // keep BOT_TOKEN stored locally (not in firebase)
-        Object.keys(state).forEach(k => delete state[k]);
-        Object.assign(state, remote || {});
-        ensureStateShape();
-        // Render UI with new state
-        renderAll();
-        console.info('State updated from Firebase');
-      } catch(e){
-        console.error('Error applying remote state', e);
-      }
-    });
-  }
-
   // Elements
   const list1 = document.getElementById('list1');
   const list2 = document.getElementById('list2');
@@ -365,11 +341,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if(prevDisplay) panelEl.style.display = prevDisplay;
   }
 
-  // Ensure panels are top-level to avoid any ancestor stacking/transform contexts
-  try {
-    Object.values(panels).forEach(p=>{ if(p && p.parentElement !== document.body) document.body.appendChild(p); });
-  } catch(_){}
-
   const editIcon = document.getElementById('editIcon');
   const exportIcon = document.getElementById('exportIcon');
   const activityIcon = document.getElementById('activityIcon');
@@ -392,6 +363,223 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Activity content box
   const activityContent = document.getElementById('activityContent');
+
+  /* -------------------------
+     Firebase <-> REST fallback helpers
+     ------------------------- */
+
+  function logActivityLine(line){
+    state.activity.push(`${new Date().toLocaleString()} — ${line}`);
+    renderActivity();
+  }
+
+  // start REST polling (GET) to fetch DB every REST_POLL_MS
+  function startRestPoll(){
+    if(usingRestFallback) return;
+    usingRestFallback = true;
+    if(db && typeof db.ref === 'function'){
+      try {
+        db.ref('dispatch_state').off(); // remove realtime listeners to minimize errors
+      } catch(e){}
+    }
+    logActivityLine('Realtime not available — switching to REST fallback (polling).');
+    restPollIntervalId = setInterval(()=> {
+      fetch(`${RTDB_REST_BASE}/dispatch_state.json`)
+        .then(r => {
+          if(!r.ok) throw new Error('REST GET failed');
+          return r.json();
+        })
+        .then(remote => {
+          if(remote){
+            // replace state but keep local-only BOT_TOKEN
+            try {
+              Object.keys(state).forEach(k => delete state[k]);
+              Object.assign(state, remote || {});
+              ensureStateShape();
+              renderAll();
+            } catch(e){
+              console.error('apply remote (REST) error', e);
+            }
+          }
+        })
+        .catch(err => {
+          console.warn('REST poll error', err);
+          // if REST also fails repeatedly, we keep retrying — network might be intermittent
+        });
+    }, REST_POLL_MS);
+  }
+
+  function stopRestPoll(){
+    if(restPollIntervalId) clearInterval(restPollIntervalId);
+    restPollIntervalId = null;
+    usingRestFallback = false;
+    logActivityLine('Stopped REST fallback; attempting realtime again.');
+  }
+
+  // Try to start realtime listener with health detection (.info/connected)
+  let infoConnectedListener = null;
+  let dispatchStateListener = null;
+  function startRealtimeListener(){
+    if(!db || !db.ref) {
+      console.info('No db available to start realtime; will use REST fallback');
+      startRestPoll();
+      return;
+    }
+
+    // reset flags
+    realtimeConnected = false;
+
+    // listen to .info/connected to know if connection established
+    try {
+      if(infoConnectedListener) db.ref('.info/connected').off('value', infoConnectedListener);
+    } catch(e){}
+
+    infoConnectedListener = (snap) => {
+      const val = snap && snap.val();
+      if(val === true){
+        realtimeConnected = true;
+        // if we had been using REST fallback, stop it
+        if(usingRestFallback){
+          stopRestPoll();
+        }
+        logActivityLine('Realtime DB connected (via .info/connected).');
+      } else {
+        // when false: not connected; fallback
+        realtimeConnected = false;
+        // start REST fallback if not already started
+        startRestPoll();
+      }
+    };
+
+    try {
+      db.ref('.info/connected').on('value', infoConnectedListener);
+    } catch(e){ console.warn('Error attaching .info/connected listener', e); startRestPoll(); }
+
+    // attach main state listener
+    try {
+      if(dispatchStateListener) db.ref('dispatch_state').off('value', dispatchStateListener);
+    } catch(e){}
+
+    dispatchStateListener = (snap) => {
+      if(!snap.exists()) return;
+      try {
+        const remote = snap.val();
+        // apply remote state to local state (replace)
+        Object.keys(state).forEach(k => delete state[k]);
+        Object.assign(state, remote || {});
+        ensureStateShape();
+        renderAll();
+        console.info('State updated from Firebase (realtime).');
+      } catch(e){
+        console.error('Error applying remote state', e);
+      }
+    };
+
+    try {
+      db.ref('dispatch_state').on('value', dispatchStateListener, (err) => {
+        console.warn('Realtime listener error', err);
+        // on any listener error, fallback to REST polling
+        startRestPoll();
+      });
+      // set a short timer: if .info/connected doesn't flip true, fallback
+      setTimeout(()=> {
+        if(!realtimeConnected && !usingRestFallback){
+          console.warn('Realtime did not connect within timeout — switching to REST fallback');
+          startRestPoll();
+        }
+      }, 5500);
+    } catch(e){
+      console.error('Error attaching dispatch_state listener', e);
+      startRestPoll();
+    }
+  }
+
+  // call at startup attempt
+  startRealtimeListener();
+
+  // If the window goes online, re-attempt realtime after short delay
+  window.addEventListener('online', ()=> {
+    setTimeout(()=> {
+      if(usingRestFallback && db) {
+        logActivityLine('Network back — attempting to re-enable realtime listener.');
+        startRealtimeListener();
+      }
+    }, 1200);
+  });
+
+  // When the page is hidden then shown, reattempt if in REST mode
+  document.addEventListener('visibilitychange', ()=> {
+    if(document.visibilityState === 'visible' && usingRestFallback && db){
+      startRealtimeListener();
+    }
+  });
+
+  /* -------------------------
+     SaveToFirebase (writes)
+     - Will use realtime SDK when available, otherwise REST PUT
+     ------------------------- */
+  function saveToFirebase(){
+    // if realtime DB object exists and we are not forced into REST fallback, prefer SDK set
+    if(db && !usingRestFallback){
+      try {
+        db.ref('dispatch_state').set(state).catch(err=>{
+          console.error('saveToFirebase error (sdk)', err);
+          // fallback to REST on SDK failure
+          saveToFirebaseRest();
+        });
+        return;
+      } catch(e){
+        console.error('saveToFirebase exception (sdk)', e);
+        saveToFirebaseRest();
+        return;
+      }
+    }
+    // else write via REST
+    saveToFirebaseRest();
+  }
+
+  function saveToFirebaseRest(){
+    if(!RTDB_REST_BASE) { console.error('No REST base URL'); return; }
+    try {
+      fetch(`${RTDB_REST_BASE}/dispatch_state.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+      }).then(resp => {
+        if(!resp.ok) throw new Error('REST PUT failed');
+        return resp.json();
+      }).then(() => {
+        // success
+        console.info('Saved via REST PUT');
+      }).catch(err => {
+        console.warn('REST PUT save error', err);
+        // if REST failing too, keep retrying on next renderAll save attempt
+      });
+    } catch(e){
+      console.error('saveToFirebaseRest exception', e);
+    }
+  }
+
+  function loadFromFirebaseOnce(){
+    if(db && !usingRestFallback){
+      return db.ref('dispatch_state').once('value').then(snap=>{
+        if(!snap.exists()) return null;
+        return snap.val();
+      }).catch(e=> {
+        console.error('loadFromFirebaseOnce (sdk) error', e);
+        // fallback to REST GET
+        return fetch(`${RTDB_REST_BASE}/dispatch_state.json`).then(r=>{
+          if(!r.ok) return null;
+          return r.json();
+        }).catch(()=> null);
+      });
+    }
+    // if using rest or no db SDK available, use REST GET
+    return fetch(`${RTDB_REST_BASE}/dispatch_state.json`).then(r=>{
+      if(!r.ok) return null;
+      return r.json();
+    }).catch(e=> { console.error('loadFromFirebaseOnce (rest) error', e); return null; });
+  }
 
   /* -------------------------
      Render helpers / zones / counters
