@@ -266,6 +266,7 @@ try {
   console.error('Firebase init error', e);
   var db = null;
 }
+let __applyingRemote = false;
 
 /* -------------------------
    Configuration
@@ -319,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if(!snap.exists()) return;
       try {
         const remote = snap.val();
+        __applyingRemote = true;
         // apply remote state to local state (replace)
         // keep BOT_TOKEN stored locally (not in firebase)
         Object.keys(state).forEach(k => delete state[k]);
@@ -329,6 +331,8 @@ document.addEventListener('DOMContentLoaded', () => {
         console.info('State updated from Firebase');
       } catch(e){
         console.error('Error applying remote state', e);
+      } finally {
+        __applyingRemote = false;
       }
     });
   }
@@ -584,7 +588,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCounters();
     renderActivity();
     // save to firebase for persistence & real-time sync
-    try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
+    if(!__applyingRemote){
+      try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
+    }
   }
 
   /* -------------------------
