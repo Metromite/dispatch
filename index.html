@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Dispatch — Counters (Telegram Auto)</title>
+
+<!-- Firebase JS SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+:root{
+  --glass-bg: rgba(255,255,255,0.04);
+  --glass-strong: rgba(255,255,255,0.12);
+  --accent: #ffd700;
+  --danger: #ff394f;
+  --shadow: rgba(0,0,0,0.35);
+}
+*{box-sizing:border-box} html,body{height:100%}
+body{
+  margin:0;
+  min-height:100vh;
+  font-family: "SF Pro Display","Segoe UI",Roboto,system-ui,sans-serif;
+  color:#fff;
+  background: url('bg.jpg') center/cover no-repeat;
+  -webkit-font-smoothing:antialiased;
+  padding:26px;
+}
+/* layout */
+.app { max-width:1200px; margin:0 auto; display:grid; grid-template-columns: 280px 1fr; gap:18px; align-items:start; }
+.card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px; border-radius:14px; box-shadow: 0 12px 34px var(--shadow); backdrop-filter: blur(14px) saturate(140%); position:relative; }
+.header{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.h1{ font-size:20px; margin:0; }
+.small{ font-size:13px; color:#ddd; }
+.left { display:flex; flex-direction:column; gap:12px; position:relative; }
+
+/* controls (pinned on top-left visually) */
+.controls { display:flex; gap:10px; align-items:center; position:relative; z-index:10010; }
+.icon-btn{ width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.04); box-shadow: 0 8px 30px var(--shadow); cursor:pointer; position:relative }
+.icon-btn img{ width:20px; height:20px; opacity:0.95 }
+
+/* floating panels */
+.panel-pop{ position:fixed; z-index:2147483647; background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(20,20,20,0.92)); border-radius:14px; padding:12px; box-shadow:0 30px 80px rgba(0,0,0,0.6); color:#eaeaea; display:none; min-width:280px; transition:opacity .18s ease, transform .18s ease; }
+.panel-pop[data-anchor="edit"]{ transform-origin: left top; top:72px; left:24px }
+.panel-pop[data-anchor="export"]{ transform-origin: left top; top:72px; left:92px }
+.panel-pop[data-anchor="activity"]{ transform-origin: left top; top:72px; left:160px }
+.panel-pop.open{ display:block; opacity:1; transform: translateY(0); }
+.panel-pop.hidden{ opacity:0; transform: translateY(-6px); }
+
+/* content inside panels */
+.panel-pop h4{ margin:0 0 8px 0; font-size:14px }
+.panel-row{ display:flex; gap:8px; align-items:center }
+.token-row{ display:flex; gap:8px; align-items:center; }
+.token-mask{ letter-spacing:2px; font-family:monospace; padding:8px 10px; background:rgba(255,255,255,0.02); border-radius:10px; border:1px solid rgba(255,255,255,0.03); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.token-actions .btn{ padding:6px 8px; font-size:13px }
+.input{ width:100%; padding:8px 10px; border-radius:10px; border:none; background:rgba(255,255,255,0.02); color:white; margin-top:8px; }
+.btn{ background:rgba(255,255,255,0.06); color:white; padding:8px 10px; border-radius:10px; border:none; cursor:pointer; box-shadow:0 8px 20px rgba(0,0,0,0.3); }
+
+/* main area: center counters horizontally and give focus */
+.main{ display:flex; flex-direction:column; gap:14px; align-items:center; }
+.header-main{ width:100%; display:flex; justify-content:space-between; align-items:center; }
+.counters-wrap{ width:100%; display:flex; justify-content:center; align-items:flex-start; }
+.counters{ display:flex; gap:24px; justify-content:center; align-items:flex-start; width:100%; max-width:820px; }
+
+/* counter cards */
+.counter{ flex:1; min-height:220px; border-radius:14px; padding:16px; position:relative; background: rgba(255,255,255,0.03); box-shadow: 0 16px 40px rgba(0,0,0,0.5); display:flex; flex-direction:column; }
+.counter h3{ margin:0 0 10px 0; font-size:18px; }
+.plus{ position:absolute; right:14px; bottom:14px; width:56px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:30px; cursor:pointer; background:rgba(255,255,255,0.04); box-shadow:0 16px 36px rgba(0,0,0,0.45); }
+.list{ display:flex; flex-direction:column; gap:10px; margin-top:6px; max-height:360px; overflow:auto; padding-right:6px; }
+.entry{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:10px; background: rgba(0,0,0,0.06); }
+
+/* modal styles (editor & zone modal) */
+.modal-back{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background: rgba(0,0,0,0.5); z-index:10020; }
+.modal{ width:720px; max-width:95%; background: linear-gradient(180deg, rgba(15,15,15,0.98), rgba(15,15,15,0.94)); padding:18px; border-radius:14px; backdrop-filter:blur(10px); box-shadow:0 30px 120px rgba(0,0,0,0.8); color:white; max-height:86vh; overflow:auto; }
+.row{ display:flex; gap:8px; align-items:center; }
+.zone-row{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:10px; background: rgba(255,255,255,0.02); margin-bottom:8px; }
+.search{ width:100%; padding:8px; border-radius:10px; border:none; background: rgba(255,255,255,0.02); color:white; }
+
+/* editor specific */
+.editor-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+.editor-card{ padding:12px; border-radius:10px; background: rgba(255,255,255,0.02); }
+.editor-list .editor-entry{ display:flex; justify-content:space-between; gap:12px; align-items:center; padding:8px; border-radius:8px; background:rgba(255,255,255,0.02); margin-bottom:8px; }
+.editor-list .editor-actions{ display:flex; gap:8px; align-items:center; }
+
+/* focus style to highlight counters visually */
+.counters.focused { box-shadow: 0 0 0 4px rgba(255,215,0,0.06) inset, 0 30px 80px rgba(0,0,0,0.45); border-radius:16px; padding:12px; }
+
+/* responsive */
+@media (max-width:980px){ .app{ grid-template-columns: 1fr; padding:12px; } .left{ order:2 } .counters{ flex-direction:column; gap:18px; } .editor-grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- left column (controls) -->
+  <div class="left">
+    <div class="card" style="position:relative;">
+      <div class="header">
+        <div>
+          <strong class="h1">Dispatch Controls</strong>
+          <div class="small">Counters & helpers</div>
+        </div>
+        <!-- pinned controls (icons) -->
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <div class="controls" id="topControls">
+            <div class="icon-btn" id="editIcon" title="Edit zones & helpers">
+              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>" alt="edit">
+            </div>
+            <div class="icon-btn" id="exportIcon" title="Export / More">
+              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 5 17 10'/><line x1='12' y1='5' x2='12' y2='19'/></svg>" alt="export">
+            </div>
+            <div class="icon-btn" id="activityIcon" title="Activity & Logs">
+              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h3l3 8 4-16 3 8h4'/></svg>" alt="activity">
+            </div>
+          </div>
+
+          <!-- Panels (kept inside left card but with high z-index) -->
+          <div class="panel-pop" id="editPanel" data-anchor="edit" aria-hidden="true">
+            <h4>Edit</h4>
+            <div style="font-size:13px;color:#ddd;margin-bottom:8px">Manage zones & helpers. Assign helper to zone so messages go automatically when added to counters.</div>
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+              <div class="token-row">
+                <div class="token-mask" id="tokenMask">●●●●●●●●●●●●●●●●</div>
+              </div>
+              <div class="token-actions">
+                <button class="btn" id="revealTokenBtn">Show</button>
+                <button class="btn" id="openEditorBtnSmall">Open</button>
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:12px;color:#ccc">Use the editor to update helpers and zones.</div>
+            <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px">
+              <label for="botToken" style="font-size:12px;color:#ccc">Telegram Bot Token</label>
+              <input id="botToken" class="input" placeholder="123456:ABC..." type="password">
+              <div style="display:flex; gap:8px; justify-content:flex-end">
+                <button class="btn" id="toggleTokenVisibilityBtn">Show</button>
+                <button class="btn" id="saveBotTokenBtn">Save</button>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+              <button class="btn" id="closeEditPanelBtn">Close</button>
+            </div>
+          </div>
+
+          <div class="panel-pop" id="exportPanel" data-anchor="export" aria-hidden="true">
+            <h4>Export</h4>
+            <div style="font-size:13px;color:#ddd;">Export counters & helpers data.</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+              <button class="btn" id="exportCsvBtn">Export CSV</button>
+              <button class="btn" id="closeExportPanelBtn">Close</button>
+            </div>
+          </div>
+
+          <div class="panel-pop" id="activityPanel" data-anchor="activity" aria-hidden="true">
+            <h4>Activity</h4>
+            <div style="font-size:13px;color:#ddd;" id="activityContent">No recent activity yet.</div>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px">
+              <button class="btn" id="closeActivityPanelBtn">Close</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- removed the old warning per request -->
+      <div style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- main column -->
+  <div class="main">
+    <div class="header-main" style="width:100%;max-width:820px;">
+      <div><h2 style="margin:0">Dispatch — Counters</h2><div class="small" style="opacity:0.9">&nbsp;</div></div>
+      <div class="small" style="opacity:0.9">&nbsp;</div>
+    </div>
+
+    <div class="counters-wrap">
+      <div class="counters focused" id="countersArea" role="region" aria-label="Counters">
+        <div class="counter card" id="counter1" tabindex="0" aria-label="Counter 1">
+          <h3>Counter 1</h3>
+          <div class="list" id="list1" aria-live="polite"></div>
+          <div class="plus" data-counter="counter1" title="Add token to Counter 1">＋</div>
+        </div>
+        <div class="counter card" id="counter2" tabindex="0" aria-label="Counter 2">
+          <h3>Counter 2</h3>
+          <div class="list" id="list2" aria-live="polite"></div>
+          <div class="plus" data-counter="counter2" title="Add token to Counter 2">＋</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Zone selection modal -->
+<div class="modal-back" id="modalBack">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="zoneSelectTitle">
+    <h3 id="zoneSelectTitle">Select Zone to Add</h3>
+    <input id="zoneSearch" class="search" placeholder="Type to search zones (predictive)">
+    <div id="zoneList" style="margin-top:12px; max-height:320px; overflow:auto"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button id="modalCancel" class="btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Editor modal: manage zones & helpers -->
+<div class="modal-back" id="editorModalBack">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
+    <h3 id="editorTitle">Editor — Zones & Helpers</h3>
+    <div style="display:flex;gap:10px;margin-top:8px;">
+      <input id="newZoneName" class="search" placeholder="New zone name (e.g. Dubai)">
+      <button id="addZoneBtn" class="btn">Add Zone</button>
+    </div>
+
+    <div class="editor-grid" style="margin-top:12px;">
+      <div class="editor-card">
+        <h4 style="margin:0 0 8px 0">Zones</h4>
+        <div id="zonesList" class="editor-list" style="margin-top:8px; max-height:360px; overflow:auto"></div>
+      </div>
+
+      <div class="editor-card">
+        <h4 style="margin:0 0 8px 0">Helpers</h4>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input id="helperName" class="search" placeholder="Helper name">
+          <input id="helperPhone" class="search" placeholder="Phone (with country code)">
+          <input id="helperTelegram" class="search" placeholder="Telegram ID (optional)">
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <select id="helperZoneSelect" class="search" style="min-width:160px"><option value="">Assign zone</option></select>
+          <button id="addHelperBtn" class="btn">Add Helper</button>
+        </div>
+        <div id="helpersList" class="editor-list" style="max-height:300px; overflow:auto"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button id="closeEditorBtn" class="btn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* -------------------------
+   FIREBASE CONFIG & INIT
+   ------------------------- */
+/*
+  NOTE: If your Realtime Database URL differs, replace databaseURL below
+  with the exact URL from Firebase Console -> Realtime Database.
+*/
+const firebaseConfig = {
+  apiKey: "AIzaSyDk_IDJAQZMBNtu57i_ls6wCsi3tzX19-A",
+  authDomain: "helper-bb456.firebaseapp.com",
+  databaseURL: "https://helper-bb456-default-rtdb.firebaseio.com",
+  projectId: "helper-bb456",
+  storageBucket: "helper-bb456.firebasestorage.app",
+  messagingSenderId: "11179124401",
+  appId: "1:11179124401:web:95bffde8f57e8f57962490",
+  measurementId: "G-2FPWGR4KH2"
+};
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  var db = firebase.database();
+  console.info('Firebase initialized');
+} catch (e) {
+  console.error('Firebase init error', e);
+  var db = null;
+}
+
+/* -------------------------
+   Configuration
+   ------------------------- */
+let BOT_TOKEN = '';
+
+/* -------------------------
+   App state and main logic (unchanged)
+   ------------------------- */
+document.addEventListener('DOMContentLoaded', () => {
+  const state = {
+    zones: {},        // { zid: { name } }
+    helpers: {},      // { hid: { name, phone, telegramId, zid } }
+    counters: { counter1: [], counter2: [] }, // arrays of { zid, seq }
+    nextSeq: 1,
+    nextZoneId: 1,
+    nextHelperId: 1,
+    activity: []
+  };
+
+  function ensureStateShape(){
+    if(!state || typeof state !== 'object') return;
+    state.zones = state.zones && typeof state.zones === 'object' ? state.zones : {};
+    state.helpers = state.helpers && typeof state.helpers === 'object' ? state.helpers : {};
+    if(!state.counters || typeof state.counters !== 'object') state.counters = { counter1: [], counter2: [] };
+    if(!Array.isArray(state.counters.counter1)) state.counters.counter1 = [];
+    if(!Array.isArray(state.counters.counter2)) state.counters.counter2 = [];
+    state.nextSeq = Number.isFinite(state.nextSeq) ? state.nextSeq : 1;
+    state.nextZoneId = Number.isFinite(state.nextZoneId) ? state.nextZoneId : 1;
+    state.nextHelperId = Number.isFinite(state.nextHelperId) ? state.nextHelperId : 1;
+    state.activity = Array.isArray(state.activity) ? state.activity : [];
+  }
+
+  // Firebase helper functions (persist / load)
+  function saveToFirebase(){
+    if(!db) return;
+    try {
+      db.ref('dispatch_state').set(state).catch(err=> console.error('saveToFirebase error', err));
+    } catch(e){ console.error('saveToFirebase', e); }
+  }
+  function loadFromFirebaseOnce(){
+    if(!db) return Promise.resolve(null);
+    return db.ref('dispatch_state').once('value').then(snap=>{
+      if(!snap.exists()) return null;
+      return snap.val();
+    }).catch(e=> { console.error('loadFromFirebaseOnce', e); return null; });
+  }
+  // realtime listener: keep UI in sync if DB changes elsewhere
+  if(db){
+    db.ref('dispatch_state').on('value', snap=>{
+      if(!snap.exists()) return;
+      try {
+        const remote = snap.val();
+        // apply remote state to local state (replace)
+        // keep BOT_TOKEN stored locally (not in firebase)
+        Object.keys(state).forEach(k => delete state[k]);
+        Object.assign(state, remote || {});
+        ensureStateShape();
+        // Render UI with new state
+        renderAll();
+        console.info('State updated from Firebase');
+      } catch(e){
+        console.error('Error applying remote state', e);
+      }
+    });
+  }
+
+  // Elements
+  const list1 = document.getElementById('list1');
+  const list2 = document.getElementById('list2');
+  const modalBack = document.getElementById('modalBack');
+  const editorModalBack = document.getElementById('editorModalBack');
+  const zoneList = document.getElementById('zoneList');
+  const zoneSearch = document.getElementById('zoneSearch');
+  const openEditorBtnSmall = document.getElementById('openEditorBtnSmall');
+
+  const panels = {
+    edit: document.getElementById('editPanel'),
+    export: document.getElementById('exportPanel'),
+    activity: document.getElementById('activityPanel')
+  };
+
+  function positionPanel(panelEl, anchorEl){
+    if(!panelEl || !anchorEl) return;
+    panelEl.style.position = 'fixed';
+    const r = anchorEl.getBoundingClientRect();
+    // place 8px below the icon, align left, clamp within viewport
+    const desiredTop = r.bottom + 8;
+    // need width; ensure visible to measure
+    const prevDisplay = panelEl.style.display;
+    if(getComputedStyle(panelEl).display === 'none') panelEl.style.display = 'block';
+    const pw = panelEl.offsetWidth || 300;
+    const maxLeft = Math.max(8, window.innerWidth - pw - 8);
+    let left = Math.min(Math.max(r.left, 8), maxLeft);
+    panelEl.style.top = `${Math.min(desiredTop, window.innerHeight - panelEl.offsetHeight - 8)}px`;
+    panelEl.style.left = `${left}px`;
+    if(prevDisplay) panelEl.style.display = prevDisplay;
+  }
+
+  // Ensure panels are top-level to avoid any ancestor stacking/transform contexts
+  try {
+    Object.values(panels).forEach(p=>{ if(p && p.parentElement !== document.body) document.body.appendChild(p); });
+  } catch(_){}
+
+  const editIcon = document.getElementById('editIcon');
+  const exportIcon = document.getElementById('exportIcon');
+  const activityIcon = document.getElementById('activityIcon');
+
+  // Editor elements
+  const editorZonesList = document.getElementById('zonesList');
+  const zonesSelect = document.getElementById('helperZoneSelect');
+  const addZoneBtn = document.getElementById('addZoneBtn');
+  const newZoneName = document.getElementById('newZoneName');
+  const addHelperBtn = document.getElementById('addHelperBtn');
+  const helperName = document.getElementById('helperName');
+  const helperPhone = document.getElementById('helperPhone');
+  const helpersList = document.getElementById('helpersList');
+  const helperTelegram = document.getElementById('helperTelegram');
+  const botTokenInput = document.getElementById('botToken');
+  const saveBotTokenBtn = document.getElementById('saveBotTokenBtn');
+  const toggleTokenVisibilityBtn = document.getElementById('toggleTokenVisibilityBtn');
+  const revealTokenBtn = document.getElementById('revealTokenBtn');
+  const tokenMask = document.getElementById('tokenMask');
+
+  // Activity content box
+  const activityContent = document.getElementById('activityContent');
+
+  /* -------------------------
+     Render helpers / zones / counters
+     ------------------------- */
+  function renderZonesInEditor() {
+    editorZonesList.innerHTML = '';
+    zonesSelect.innerHTML = '<option value="">Assign zone</option>';
+    Object.keys(state.zones).forEach(zid => {
+      const z = state.zones[zid];
+      const div = document.createElement('div');
+      div.className = 'editor-entry';
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.alignItems = 'center';
+      div.style.padding = '8px';
+      div.style.marginBottom = '8px';
+      div.style.borderRadius = '8px';
+      div.style.background = 'rgba(255,255,255,0.02)';
+      const left = document.createElement('div');
+      left.innerHTML = `<div style="font-weight:700">${z.name}</div><div style="font-size:12px;color:#ccc">ID: <code>${zid}</code></div>`;
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.gap = '8px';
+      const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
+      edit.addEventListener('click', ()=> {
+        const newName = prompt('Zone name:', z.name) ?? z.name;
+        let newId = prompt('Zone ID:', zid) ?? zid;
+        newId = (newId||'').trim();
+        if(!newId) return;
+        if(newId !== zid){
+          // migrate id across state
+          if(state.zones[newId]){ alert('ID already exists'); return; }
+          state.zones[newId] = { name: newName };
+          delete state.zones[zid];
+          // update helpers
+          Object.keys(state.helpers).forEach(hid=>{ if(state.helpers[hid].zid===zid) state.helpers[hid].zid=newId; });
+          // update counters
+          Object.keys(state.counters).forEach(cnt=>{
+            state.counters[cnt] = state.counters[cnt].map(e=> e.zid===zid? {...e, zid:newId}: e);
+          });
+        } else {
+          state.zones[zid].name = newName;
+        }
+        renderAll();
+      });
+      const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
+      del.addEventListener('click', ()=> {
+        // remove zone and unassign helpers referencing it
+        delete state.zones[zid];
+        Object.keys(state.helpers).forEach(hid=>{
+          if(state.helpers[hid].zid === zid) state.helpers[hid].zid = '';
+        });
+        renderAll();
+      });
+      actions.appendChild(edit);
+      actions.appendChild(del);
+      div.appendChild(left);
+      div.appendChild(actions);
+      editorZonesList.appendChild(div);
+
+      // add to select
+      const opt = document.createElement('option');
+      opt.value = zid; opt.text = z.name;
+      zonesSelect.appendChild(opt);
+    });
+  }
+
+  function renderHelpersInEditor(){
+    helpersList.innerHTML = '';
+    Object.keys(state.helpers).forEach(hid=>{
+      const h = state.helpers[hid];
+      const div = document.createElement('div');
+      div.className='editor-entry';
+      div.style.display='flex';
+      div.style.justifyContent='space-between';
+      div.style.alignItems='center';
+      div.style.padding='8px';
+      div.style.marginBottom='8px';
+      div.style.borderRadius='8px';
+      div.style.background='rgba(255,255,255,0.02)';
+      const left = document.createElement('div');
+      left.innerHTML = `<div style=\"font-weight:700\">${h.name}</div><div style=\"font-size:12px;color:#ccc\">ID: <code>${hid}</code> · TelID: ${h.telegramId||'-'}<br>${h.phone} ${h.zid? '— ' + (state.zones[h.zid]?.name||'') : ''}</div>`;
+      const actions = document.createElement('div');
+      actions.style.display='flex'; actions.style.gap='8px';
+      const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
+      del.addEventListener('click', ()=> { delete state.helpers[hid]; renderAll(); });
+      const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
+      edit.addEventListener('click', ()=> {
+        // quick edit: populate fields and track editing id
+        helperName.value = h.name;
+        helperPhone.value = h.phone;
+        helperTelegram.value = h.telegramId||'';
+        zonesSelect.value = h.zid || '';
+        helperName.dataset.editingId = hid;
+        helperName.focus();
+      });
+      actions.appendChild(edit); actions.appendChild(del);
+      div.appendChild(left); div.appendChild(actions);
+      helpersList.appendChild(div);
+    });
+  }
+
+  function renderZonesForModal(){
+    zoneList.innerHTML = '';
+    const q = zoneSearch.value?.toLowerCase?.() || '';
+    let shown = 0;
+    Object.keys(state.zones).forEach(zid=>{
+      const z = state.zones[zid];
+      if(!z || !z.name) return;
+      if(q && !z.name.toLowerCase().includes(q)) return;
+      const row = document.createElement('div');
+      row.className='zone-row';
+      row.innerHTML = `<div><strong>${z.name}</strong></div>`;
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Add';
+      btn.addEventListener('click', ()=> assignZone(zid));
+      row.appendChild(btn);
+      zoneList.appendChild(row);
+      shown++;
+    });
+    if(shown === 0){
+      const empty = document.createElement('div');
+      empty.className = 'zone-row';
+      empty.style.justifyContent = 'center';
+      empty.innerHTML = '<div style="opacity:0.8">No zones available. Open Editor to add zones.</div>';
+      zoneList.appendChild(empty);
+    }
+  }
+
+  function renderCounters(){
+    list1.innerHTML = ''; list2.innerHTML = '';
+    const renderEntry = (container, a)=>{
+      const e = document.createElement('div');
+      e.className='entry';
+      const zoneName = state.zones[a.zid]?.name || a.zid;
+      // pick first helper assigned to this zone (if any)
+      const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === a.zid);
+      const helper = helperId ? state.helpers[helperId] : null;
+      const helperLine = helper ? `<div style="font-size:12px;color:#ddd;margin-top:4px">${helper.name} · ${helper.phone}</div>` : '';
+      e.innerHTML = `<div><div><strong>${zoneName}</strong> — Token ${a.seq}</div>${helperLine}</div>`;
+      container.appendChild(e);
+    };
+    state.counters.counter1.forEach(a=> renderEntry(list1, a));
+    state.counters.counter2.forEach(a=> renderEntry(list2, a));
+  }
+
+  function renderActivity(){
+    if(state.activity.length===0){
+      activityContent.textContent = 'No recent activity yet.';
+    } else {
+      activityContent.innerHTML = state.activity.slice(-10).reverse().map(it=>`<div style="margin-bottom:6px;font-size:13px">${it}</div>`).join('');
+    }
+  }
+
+  // renderAll: now also persists to Firebase automatically
+  function renderAll(){
+    renderZonesInEditor();
+    renderHelpersInEditor();
+    renderCounters();
+    renderActivity();
+    // save to firebase for persistence & real-time sync
+    try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
+  }
+
+  /* -------------------------
+     Interaction: open/close panels and editor
+     ------------------------- */
+  // Close all panels helper
+  function closePanels(){
+    Object.values(panels).forEach(p=>{
+      p.classList.remove('open');
+      p.classList.add('hidden');
+      p.style.display = 'none';
+      p.setAttribute('aria-hidden','true');
+    });
+  }
+
+  // Open panel
+  function togglePanel(name){
+    const p = panels[name];
+    if(!p) return;
+    const isOpen = p.classList.contains('open');
+    closePanels();
+    if(!isOpen){
+      p.style.display = 'block';
+      p.classList.remove('hidden');
+      p.classList.add('open');
+      p.setAttribute('aria-hidden','false');
+      // position under corresponding icon
+      const anchorMap = { edit: editIcon, export: exportIcon, activity: activityIcon };
+      positionPanel(p, anchorMap[name]);
+    }
+  }
+
+  // Ensure clicks inside panels don't bubble up to document click which closes panels
+  Object.values(panels).forEach(p=>{
+    p.addEventListener('click', (ev)=> ev.stopPropagation());
+  });
+  // Reposition open panel(s) on resize to keep them below icons
+  window.addEventListener('resize', ()=>{
+    Object.entries(panels).forEach(([name, p])=>{
+      if(p.classList.contains('open')){
+        const anchorMap = { edit: editIcon, export: exportIcon, activity: activityIcon };
+        positionPanel(p, anchorMap[name]);
+      }
+    });
+  });
+
+  editIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('edit'); });
+  exportIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('export'); });
+  activityIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('activity'); });
+
+  // document click closes panels, but clicking inside panels won't (we stopped propagation)
+  document.addEventListener('click', ()=> closePanels());
+
+  // Panel close buttons (also stop propagation)
+  document.getElementById('closeEditPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
+  document.getElementById('closeExportPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
+  document.getElementById('closeActivityPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
+
+  /* -------------------------
+     Editor open from panel button (should NOT close panel)
+     ------------------------- */
+  openEditorBtnSmall.addEventListener('click', (e)=> {
+    e.stopPropagation();
+    closePanels();
+    editorModalBack.style.display = 'flex';
+    renderAll();
+  });
+
+  /* -------------------------
+     Bot token UI
+     ------------------------- */
+  let tokenUnlocked = false;
+  function updateTokenUI(){
+    if(!tokenUnlocked){
+      botTokenInput.disabled = true;
+      botTokenInput.type = 'password';
+      toggleTokenVisibilityBtn.textContent = 'Show';
+      revealTokenBtn.textContent = 'Unlock';
+    } else {
+      botTokenInput.disabled = false;
+      botTokenInput.type = 'text';
+      toggleTokenVisibilityBtn.textContent = 'Hide';
+      revealTokenBtn.textContent = 'Lock';
+    }
+  }
+  function requirePasscode(){
+    const passcode = prompt('Enter passcode to unlock bot token');
+    return passcode === '923623';
+  }
+  // load token from localStorage
+  try { BOT_TOKEN = localStorage.getItem('dispatch_bot_token') || ''; } catch(_){}
+  if(BOT_TOKEN && botTokenInput){ botTokenInput.value = BOT_TOKEN; }
+  updateTokenUI();
+
+  saveBotTokenBtn?.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!tokenUnlocked && !requirePasscode()) return;
+    tokenUnlocked = true;
+    BOT_TOKEN = botTokenInput.value.trim();
+    try { localStorage.setItem('dispatch_bot_token', BOT_TOKEN); } catch(_){ }
+    updateTokenUI();
+    state.activity.push(`${new Date().toLocaleTimeString()} — Bot token saved`);
+    renderActivity();
+    // don't save bot token to firebase (kept local)
+  });
+  toggleTokenVisibilityBtn?.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!tokenUnlocked && !requirePasscode()) return;
+    tokenUnlocked = true;
+    if(!botTokenInput) return;
+    const isPwd = botTokenInput.type === 'password';
+    botTokenInput.type = isPwd ? 'text' : 'password';
+    toggleTokenVisibilityBtn.textContent = isPwd ? 'Hide' : 'Show';
+    updateTokenUI();
+  });
+  revealTokenBtn?.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!tokenUnlocked){
+      if(!requirePasscode()) return;
+      tokenUnlocked = true;
+    } else {
+      // toggle lock on second click
+      tokenUnlocked = false;
+    }
+    updateTokenUI();
+  });
+
+  /* -------------------------
+     Telegram send (image beacon to avoid CORS)
+     ------------------------- */
+  function sendTelegramMessage(chatId, text){
+    const url = `https://api.telegram.org/bot${encodeURIComponent(BOT_TOKEN)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
+    const img = new Image();
+    let done = false;
+    const mark = (ok)=>{
+      if(done) return; done = true;
+      state.activity.push(`${new Date().toLocaleTimeString()} — Telegram ${ok?'sent (requested)':'failed to request'}`);
+      renderActivity();
+    };
+    img.onload = ()=> mark(true);
+    img.onerror = ()=> mark(true); // request still goes through; response isn't image
+    img.src = url;
+  }
+
+  function normalizeUaePhone(input){
+    let s = (input||'').replace(/\D+/g,'');
+    if(!s) return input;
+    if(s.startsWith('971')) return `+${s}`;
+    if(s.startsWith('0')) s = s.substring(1);
+    if(s.startsWith('5')) return `+971${s}`;
+    // fallback
+    return `+971${s}`;
+  }
+
+  document.getElementById('closeEditorBtn').addEventListener('click', ()=> {
+    editorModalBack.style.display = 'none';
+  });
+
+  // clicking inside editor should not close it
+  document.querySelector('#editorModalBack .modal')?.addEventListener?.('click', e=> e.stopPropagation?.());
+
+  // clicking modal backdrop closes the editor
+  editorModalBack.addEventListener('click', (e)=> {
+    if(e.target === editorModalBack) editorModalBack.style.display = 'none';
+  });
+
+  /* -------------------------
+     Zone modal open/close (counters)
+     ------------------------- */
+  let activeCounter = null;
+  document.querySelectorAll('.plus').forEach(b=>{
+    b.addEventListener('click', (ev)=> {
+      ev.stopPropagation();
+      activeCounter = b.getAttribute('data-counter');
+      modalBack.style.display='flex';
+      zoneSearch.value = '';
+      renderZonesForModal();
+    });
+  });
+  document.getElementById('modalCancel').addEventListener('click', ()=> modalBack.style.display='none');
+  modalBack.addEventListener('click', (e)=> { if(e.target === modalBack) modalBack.style.display='none'; });
+  zoneSearch.addEventListener('input', renderZonesForModal);
+
+  /* -------------------------
+     Assign zone -> counter (and send message)
+     ------------------------- */
+  function assignZone(zid){
+    const seq = state.nextSeq++;
+    state.counters[activeCounter].push({ zid, seq });
+    modalBack.style.display='none';
+    renderCounters();
+
+    // pick first helper assigned to this zone (if any)
+    const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === zid);
+    const helper = helperId ? state.helpers[helperId] : null;
+
+    const payload = {
+      counter: activeCounter,
+      zone: state.zones[zid].name,
+      zoneId: zid,
+      token: seq,
+      helper: helper ? { id: helperId, name: helper.name, phone: helper.phone, telegramId: helper.telegramId||'' } : null,
+      timestamp: new Date().toISOString()
+    };
+
+    // push to activity log
+    state.activity.push(`${new Date().toLocaleString()} — ${payload.zone} token ${payload.token} added to ${payload.counter}`);
+    if(!helper){
+      state.activity.push(`${new Date().toLocaleTimeString()} — No helper assigned to zone '${payload.zone}'. Assign a helper to this zone to enable Telegram.`);
+    } else if(!helper.telegramId){
+      state.activity.push(`${new Date().toLocaleTimeString()} — Helper '${helper.name}' has no Telegram ID. Add Telegram ID or enable Bot Sync.`);
+    }
+    renderActivity();
+
+    // Send Telegram message directly if possible
+    if(helper && helper.telegramId){
+      if(!BOT_TOKEN){
+        state.activity.push(`${new Date().toLocaleTimeString()} — Bot token not set. Open Edit and save your bot token.`);
+        renderActivity();
+      } else {
+        const msg = `Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
+        sendTelegramMessage(helper.telegramId, msg);
+      }
+    } else {
+      state.activity.push(`${new Date().toLocaleTimeString()} — Skipped Telegram: missing helper or Telegram ID.`);
+      renderActivity();
+    }
+
+    // persist after assignment
+    try { saveToFirebase(); } catch(e){ console.error('assignZone saveToFirebase', e); }
+  }
+
+  /* -------------------------
+     Editor: add zone & helpers
+     ------------------------- */
+  addZoneBtn.addEventListener('click', ()=> {
+    const name = (newZoneName.value||'').trim();
+    if(!name) return alert('Enter zone name');
+    if(!Number.isFinite(state.nextZoneId)) state.nextZoneId = 1;
+    const zid = 'z' + (state.nextZoneId++);
+    state.zones[zid] = { name };
+    newZoneName.value = '';
+    renderAll();
+  });
+
+  addHelperBtn.addEventListener('click', ()=> {
+    const name = (helperName.value||'').trim();
+    let phone = (helperPhone.value||'').trim();
+    const telegramId = (helperTelegram.value||'').trim();
+    const zid = zonesSelect.value || '';
+    if(!name || !phone) return alert('Enter helper name & phone');
+    // UAE normalization: allow numbers without country code
+    phone = normalizeUaePhone(phone);
+    const editingId = helperName.dataset.editingId;
+    if(editingId){
+      // allow changing helper ID
+      const newId = prompt('Helper ID (optional to change):', editingId) || editingId;
+      const finalId = newId.trim();
+      if(finalId !== editingId && state.helpers[finalId]){ alert('Helper ID already exists'); return; }
+      // delete old and set new
+      delete state.helpers[editingId];
+      state.helpers[finalId] = { name, phone, telegramId, zid };
+      delete helperName.dataset.editingId;
+    } else {
+      const hid = 'h' + (state.nextHelperId++);
+      state.helpers[hid] = { name, phone, telegramId, zid };
+    }
+    helperName.value = ''; helperPhone.value = ''; helperTelegram.value=''; zonesSelect.value = '';
+    renderAll();
+  });
+
+  // Export CSV (simple)
+  document.getElementById('exportCsvBtn').addEventListener('click', (e)=> {
+    e.stopPropagation();
+    // build CSV for zones, helpers, counters
+    let csv = 'type,id,name,extra\n';
+    Object.keys(state.zones).forEach(zid=> csv += `zone,${zid},"${state.zones[zid].name}",\n`);
+    Object.keys(state.helpers).forEach(hid=> csv += `helper,${hid},"${state.helpers[hid].name}","${state.helpers[hid].phone}|${state.helpers[hid].telegramId||''}|${state.helpers[hid].zid||''}"\n`);
+    // counters
+    Object.keys(state.counters).forEach(cnt=>{
+      state.counters[cnt].forEach(entry=>{
+        csv += `counter,${cnt},"${state.zones[entry.zid]?.name||entry.zid}","token:${entry.seq}"\n`;
+      });
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'dispatch_export.csv'; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  /* -------------------------
+     Sample seed data (only if DB empty)
+     ------------------------- */
+  (function seedAndLoadFirebase(){
+    loadFromFirebaseOnce().then(remote=>{
+      if(remote){
+        // remote exists — use remote state
+        try {
+          Object.keys(state).forEach(k => delete state[k]);
+          Object.assign(state, remote || {});
+          ensureStateShape();
+        } catch(e){ console.error('apply remote on load', e); }
+        renderAll();
+      } else {
+        // no remote: create seeds and persist
+        const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
+        const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
+        const z3 = 'z' + (state.nextZoneId++); state.zones[z3] = { name:'Sharjah' };
+        renderAll();
+        try { saveToFirebase(); } catch(e){ console.error('seed saveToFirebase', e); }
+      }
+    }).catch(e=> {
+      console.error('seedAndLoadFirebase error', e);
+      // fallback seed locally
+      const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
+      const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
+      const z3 = 'z' + (state.nextZoneId++); state.zones[z3] = { name:'Sharjah' };
+      renderAll();
+    });
+  })();
+
+  /* -------------------------
+     Keyboard focus / a11y: focus counters when page loads
+     ------------------------- */
+  const countersArea = document.getElementById('countersArea');
+  setTimeout(()=> { countersArea.scrollIntoView({behavior:'smooth', block:'center'}); }, 120);
+
+  /* -------------------------
+     Prevent accidental closing while interacting with panels
+     ------------------------- */
+  // stopPropagation for panel content already set; also stop on controls container
+  document.getElementById('topControls').addEventListener('click', e=> e.stopPropagation());
+
+  /* -------------------------
+     Finish: initial render (renderAll called after load)
+     ------------------------- */
+  // initial render handled in seed/load
+}); // DOMContentLoaded
+</script>
+</body>
+</html>
