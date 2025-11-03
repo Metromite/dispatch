@@ -353,10 +353,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!state || typeof state !== 'object') return;
     state.zones = state.zones && typeof state.zones === 'object' ? state.zones : {};
     state.helpers = state.helpers && typeof state.helpers === 'object' ? state.helpers : {};
+
     if(!state.counters || typeof state.counters !== 'object') state.counters = { counter1: [], counter2: [] };
+
+    // If Firebase returned objects instead of arrays, convert to arrays (preserve seq order)
+    if(!Array.isArray(state.counters.counter1) && state.counters.counter1 && typeof state.counters.counter1 === 'object'){
+      state.counters.counter1 = Object.values(state.counters.counter1).filter(Boolean).sort((a,b)=> (a.seq||0)-(b.seq||0));
+    }
+    if(!Array.isArray(state.counters.counter2) && state.counters.counter2 && typeof state.counters.counter2 === 'object'){
+      state.counters.counter2 = Object.values(state.counters.counter2).filter(Boolean).sort((a,b)=> (a.seq||0)-(b.seq||0));
+    }
+
     if(!Array.isArray(state.counters.counter1)) state.counters.counter1 = [];
     if(!Array.isArray(state.counters.counter2)) state.counters.counter2 = [];
-    state.nextSeq = Number.isFinite(state.nextSeq) ? state.nextSeq : 1;
+
+    // Ensure nextSeq is ahead of any existing tokens
+    const maxSeq = Math.max(0, ...state.counters.counter1.map(e=> e && e.seq || 0), ...state.counters.counter2.map(e=> e && e.seq || 0));
+    state.nextSeq = Number.isFinite(state.nextSeq) ? Math.max(state.nextSeq, maxSeq+1) : (maxSeq+1);
+
     state.nextZoneId = Number.isFinite(state.nextZoneId) ? state.nextZoneId : 1;
     state.nextHelperId = Number.isFinite(state.nextHelperId) ? state.nextHelperId : 1;
     state.activity = Array.isArray(state.activity) ? state.activity : [];
