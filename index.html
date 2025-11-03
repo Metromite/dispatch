@@ -652,6 +652,8 @@ document.addEventListener('DOMContentLoaded', () => {
      ------------------------- */
   function renderZonesInEditor() {
     editorZonesList.innerHTML = '';
+    // Preserve current selection to avoid losing user's choice during background re-renders
+    const prevSelection = zonesSelect.value;
     zonesSelect.innerHTML = '<option value="">Assign zone</option>';
     Object.keys(state.zones).forEach(zid => {
       const z = state.zones[zid];
@@ -706,6 +708,10 @@ document.addEventListener('DOMContentLoaded', () => {
       opt.value = zid; opt.text = z.name;
       zonesSelect.appendChild(opt);
     });
+    // Restore previous selection if it still exists among options
+    if(prevSelection && Array.from(zonesSelect.options).some(o => o.value === prevSelection)){
+      zonesSelect.value = prevSelection;
+    }
   }
 
   function renderHelpersInEditor(){
@@ -898,6 +904,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('clearActivityBtn').addEventListener('click', (e)=>{
     e.stopPropagation();
     state.activity = [];
+    // Also reset token numbering when clearing activity
+    state.nextSeq = 1;
     renderActivity();
     try { saveToFirebase(); } catch(e2){ console.error('clearActivity saveToFirebase', e2); }
   });
