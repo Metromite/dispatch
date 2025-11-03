@@ -471,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
               Object.keys(state).forEach(k => delete state[k]);
               Object.assign(state, remote || {});
               ensureStateShape();
-              renderAll();
+              renderAllNoSave();
             } catch(e){
               console.error('apply remote (REST) error', e);
             }
@@ -542,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.keys(state).forEach(k => delete state[k]);
         Object.assign(state, remote || {});
         ensureStateShape();
-        renderAll();
+        renderAllNoSave();
         console.info('State updated from Firebase (realtime).');
       } catch(e){
         console.error('Error applying remote state', e);
@@ -833,6 +833,13 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCounters();
     renderActivity();
     try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
+  }
+
+  function renderAllNoSave(){
+    renderZonesInEditor();
+    renderHelpersInEditor();
+    renderCounters();
+    renderActivity();
   }
 
   /* -------------------------
@@ -1171,7 +1178,7 @@ document.addEventListener('DOMContentLoaded', () => {
           Object.assign(state, remote || {});
           ensureStateShape();
         } catch(e){ console.error('apply remote on load', e); }
-        renderAll();
+        renderAllNoSave();
       } else {
         const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
         const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
