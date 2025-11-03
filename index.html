@@ -42,9 +42,10 @@ body{
 
 /* floating panels - FORCE topmost and accept pointer events */
 .panel-pop{ position:fixed; z-index:9999999999 !important; background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(20,20,20,0.92)); border-radius:14px; padding:12px; box-shadow:0 30px 80px rgba(0,0,0,0.6); color:#eaeaea; display:none; min-width:280px; transition:opacity .18s ease, transform .18s ease; pointer-events:auto; }
-.panel-pop[data-anchor="edit"]{ transform-origin: left top; top:72px; left:24px }
-.panel-pop[data-anchor="export"]{ transform-origin: left top; top:72px; left:92px }
-.panel-pop[data-anchor="activity"]{ transform-origin: left top; top:72px; left:160px }
+/* align left under icons */
+.panel-pop[data-anchor="edit"]{ transform-origin: left top; top:72px; left:24px; }
+.panel-pop[data-anchor="export"]{ transform-origin: left top; top:72px; left:92px; }
+.panel-pop[data-anchor="activity"]{ transform-origin: left top; top:72px; left:160px; }
 .panel-pop.open{ display:block; opacity:1; transform: translateY(0); }
 .panel-pop.hidden{ opacity:0; transform: translateY(-6px); }
 
@@ -328,17 +329,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!panelEl || !anchorEl) return;
     panelEl.style.position = 'fixed';
     const r = anchorEl.getBoundingClientRect();
-    // place 8px below the icon, align left, clamp within viewport
     const desiredTop = r.bottom + 8;
-    // need width; ensure visible to measure
-    const prevDisplay = panelEl.style.display;
-    if(getComputedStyle(panelEl).display === 'none') panelEl.style.display = 'block';
     const pw = panelEl.offsetWidth || 300;
     const maxLeft = Math.max(8, window.innerWidth - pw - 8);
     let left = Math.min(Math.max(r.left, 8), maxLeft);
     panelEl.style.top = `${Math.min(desiredTop, window.innerHeight - panelEl.offsetHeight - 8)}px`;
     panelEl.style.left = `${left}px`;
-    if(prevDisplay) panelEl.style.display = prevDisplay;
+    if(getComputedStyle(panelEl).display === 'none'){
+      panelEl.style.display = '';
+    }
   }
 
   const editIcon = document.getElementById('editIcon');
@@ -369,7 +368,6 @@ document.addEventListener('DOMContentLoaded', () => {
      ------------------------- */
 
   function logActivityLine(line){
-    // Keep logging internally for debugging, but activity panel will filter display.
     state.activity.push(`${new Date().toLocaleString()} — ${line}`);
     renderActivity();
   }
@@ -380,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
     usingRestFallback = true;
     if(db && typeof db.ref === 'function'){
       try {
-        db.ref('dispatch_state').off(); // remove realtime listeners to minimize errors
+        db.ref('dispatch_state').off();
       } catch(e){}
     }
     logActivityLine('Realtime not available — switching to REST fallback (polling).');
@@ -392,7 +390,6 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(remote => {
           if(remote){
-            // replace state but keep local-only BOT_TOKEN
             try {
               Object.keys(state).forEach(k => delete state[k]);
               Object.assign(state, remote || {});
@@ -405,7 +402,6 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => {
           console.warn('REST poll error', err);
-          // if REST also fails repeatedly, we keep retrying — network might be intermittent
         });
     }, REST_POLL_MS);
   }
@@ -417,7 +413,6 @@ document.addEventListener('DOMContentLoaded', () => {
     logActivityLine('Stopped REST fallback; attempting realtime again.');
   }
 
-  // Try to start realtime listener with health detection (.info/connected)
   let infoConnectedListener = null;
   let dispatchStateListener = null;
   function startRealtimeListener(){
@@ -427,10 +422,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // reset flags
     realtimeConnected = false;
 
-    // listen to .info/connected to know if connection established
     try {
       if(infoConnectedListener) db.ref('.info/connected').off('value', infoConnectedListener);
     } catch(e){}
@@ -439,15 +432,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const val = snap && snap.val();
       if(val === true){
         realtimeConnected = true;
-        // if we had been using REST fallback, stop it
         if(usingRestFallback){
           stopRestPoll();
         }
         logActivityLine('Realtime DB connected (via .info/connected).');
       } else {
-        // when false: not connected; fallback
         realtimeConnected = false;
-        // start REST fallback if not already started
         startRestPoll();
       }
     };
@@ -456,7 +446,6 @@ document.addEventListener('DOMContentLoaded', () => {
       db.ref('.info/connected').on('value', infoConnectedListener);
     } catch(e){ console.warn('Error attaching .info/connected listener', e); startRestPoll(); }
 
-    // attach main state listener
     try {
       if(dispatchStateListener) db.ref('dispatch_state').off('value', dispatchStateListener);
     } catch(e){}
@@ -465,7 +454,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if(!snap.exists()) return;
       try {
         const remote = snap.val();
-        // apply remote state to local state (replace)
         Object.keys(state).forEach(k => delete state[k]);
         Object.assign(state, remote || {});
         ensureStateShape();
@@ -479,10 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       db.ref('dispatch_state').on('value', dispatchStateListener, (err) => {
         console.warn('Realtime listener error', err);
-        // on any listener error, fallback to REST polling
         startRestPoll();
       });
-      // set a short timer: if .info/connected doesn't flip true, fallback
       setTimeout(()=> {
         if(!realtimeConnected && !usingRestFallback){
           console.warn('Realtime did not connect within timeout — switching to REST fallback');
@@ -495,10 +481,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // call at startup attempt
   startRealtimeListener();
 
-  // If the window goes online, re-attempt realtime after short delay
   window.addEventListener('online', ()=> {
     setTimeout(()=> {
       if(usingRestFallback && db) {
@@ -508,7 +492,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
   });
 
-  // When the page is hidden then shown, reattempt if in REST mode
   document.addEventListener('visibilitychange', ()=> {
     if(document.visibilityState === 'visible' && usingRestFallback && db){
       startRealtimeListener();
@@ -517,15 +500,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* -------------------------
      SaveToFirebase (writes)
-     - Will use realtime SDK when available, otherwise REST PUT
      ------------------------- */
   function saveToFirebase(){
-    // if realtime DB object exists and we are not forced into REST fallback, prefer SDK set
     if(db && !usingRestFallback){
       try {
         db.ref('dispatch_state').set(state).catch(err=>{
           console.error('saveToFirebase error (sdk)', err);
-          // fallback to REST on SDK failure
           saveToFirebaseRest();
         });
         return;
@@ -535,7 +515,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
     }
-    // else write via REST
     saveToFirebaseRest();
   }
 
@@ -550,11 +529,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!resp.ok) throw new Error('REST PUT failed');
         return resp.json();
       }).then(() => {
-        // success
         console.info('Saved via REST PUT');
       }).catch(err => {
         console.warn('REST PUT save error', err);
-        // if REST failing too, keep retrying on next renderAll save attempt
       });
     } catch(e){
       console.error('saveToFirebaseRest exception', e);
@@ -568,23 +545,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return snap.val();
       }).catch(e=> {
         console.error('loadFromFirebaseOnce (sdk) error', e);
-        // fallback to REST GET
         return fetch(`${RTDB_REST_BASE}/dispatch_state.json`).then(r=>{
           if(!r.ok) return null;
           return r.json();
         }).catch(()=> null);
       });
     }
-    // if using rest or no db SDK available, use REST GET
     return fetch(`${RTDB_REST_BASE}/dispatch_state.json`).then(r=>{
       if(!r.ok) return null;
       return r.json();
     }).catch(e=> { console.error('loadFromFirebaseOnce (rest) error', e); return null; });
   }
 
-  /* -------------------------
-     Render helpers / zones / counters
-     ------------------------- */
   function renderZonesInEditor() {
     editorZonesList.innerHTML = '';
     zonesSelect.innerHTML = '<option value="">Assign zone</option>';
@@ -603,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
       left.innerHTML = `<div style="font-weight:700">${z.name}</div><div style="font-size:12px;color:#ccc">ID: <code>${zid}</code></div>`;
       const actions = document.createElement('div');
       actions.style.display = 'flex';
-      actions.style.gap = '8px';
+      actions.style.gap='8px';
       const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
       edit.addEventListener('click', ()=> {
         const newName = prompt('Zone name:', z.name) ?? z.name;
@@ -611,13 +583,10 @@ document.addEventListener('DOMContentLoaded', () => {
         newId = (newId||'').trim();
         if(!newId) return;
         if(newId !== zid){
-          // migrate id across state
           if(state.zones[newId]){ alert('ID already exists'); return; }
           state.zones[newId] = { name: newName };
           delete state.zones[zid];
-          // update helpers
           Object.keys(state.helpers).forEach(hid=>{ if(state.helpers[hid].zid===zid) state.helpers[hid].zid=newId; });
-          // update counters
           Object.keys(state.counters).forEach(cnt=>{
             state.counters[cnt] = state.counters[cnt].map(e=> e.zid===zid? {...e, zid:newId}: e);
           });
@@ -628,7 +597,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
       del.addEventListener('click', ()=> {
-        // remove zone and unassign helpers referencing it
         delete state.zones[zid];
         Object.keys(state.helpers).forEach(hid=>{
           if(state.helpers[hid].zid === zid) state.helpers[hid].zid = '';
@@ -641,7 +609,6 @@ document.addEventListener('DOMContentLoaded', () => {
       div.appendChild(actions);
       editorZonesList.appendChild(div);
 
-      // add to select
       const opt = document.createElement('option');
       opt.value = zid; opt.text = z.name;
       zonesSelect.appendChild(opt);
@@ -669,7 +636,6 @@ document.addEventListener('DOMContentLoaded', () => {
       del.addEventListener('click', ()=> { delete state.helpers[hid]; renderAll(); });
       const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
       edit.addEventListener('click', ()=> {
-        // quick edit: populate fields and track editing id
         helperName.value = h.name;
         helperPhone.value = h.phone;
         helperTelegram.value = h.telegramId||'';
@@ -678,7 +644,8 @@ document.addEventListener('DOMContentLoaded', () => {
         helperName.focus();
       });
       actions.appendChild(edit); actions.appendChild(del);
-      div.appendChild(left); div.appendChild(actions);
+      div.appendChild(left);
+      div.appendChild(actions);
       helpersList.appendChild(div);
     });
   }
@@ -716,7 +683,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const e = document.createElement('div');
       e.className='entry';
       const zoneName = state.zones[a.zid]?.name || a.zid;
-      // pick first helper assigned to this zone (if any)
       const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === a.zid);
       const helper = helperId ? state.helpers[helperId] : null;
       const helperLine = helper ? `<div style="font-size:12px;color:#ddd;margin-top:4px">${helper.name} · ${helper.phone}</div>` : '';
@@ -749,7 +715,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if(idx > -1){
       const entry = state.counters[counterName][idx];
       state.counters[counterName].splice(idx,1);
-      // activity: only log remove
       const zn = state.zones[entry.zid]?.name || entry.zid;
       state.activity.push(`${new Date().toLocaleString()} — ${zn} token ${entry.seq} removed from ${counterName}`);
       renderCounters();
@@ -759,7 +724,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderActivity(){
-    // Only show lines about tokens added/removed — filter by 'token' word
     const lines = (state.activity || []).slice(-200).reverse();
     const filtered = lines.filter(l => /\btoken\b/i.test(l) && (/\badded\b/i.test(l) || /\bremoved\b/i.test(l)));
     if(filtered.length === 0){
@@ -769,20 +733,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // renderAll: now also persists to Firebase automatically
   function renderAll(){
     renderZonesInEditor();
     renderHelpersInEditor();
     renderCounters();
     renderActivity();
-    // save to firebase for persistence & real-time sync
     try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
   }
 
-  /* -------------------------
-     Interaction: open/close panels and editor
-     ------------------------- */
-  // Close all panels helper
   function closePanels(){
     Object.values(panels).forEach(p=>{
       p.classList.remove('open');
@@ -792,7 +750,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Open panel
   function togglePanel(name){
     const p = panels[name];
     if(!p) return;
@@ -803,17 +760,14 @@ document.addEventListener('DOMContentLoaded', () => {
       p.classList.remove('hidden');
       p.classList.add('open');
       p.setAttribute('aria-hidden','false');
-      // position under corresponding icon
       const anchorMap = { edit: editIcon, export: exportIcon, activity: activityIcon };
       positionPanel(p, anchorMap[name]);
     }
   }
 
-  // Ensure clicks inside panels don't bubble up to document click which closes panels
   Object.values(panels).forEach(p=>{
     p.addEventListener('click', (ev)=> ev.stopPropagation());
   });
-  // Reposition open panel(s) on resize to keep them below icons
   window.addEventListener('resize', ()=>{
     Object.entries(panels).forEach(([name, p])=>{
       if(p.classList.contains('open')){
@@ -827,10 +781,8 @@ document.addEventListener('DOMContentLoaded', () => {
   exportIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('export'); });
   activityIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('activity'); });
 
-  // document click closes panels, but clicking inside panels won't (we stopped propagation)
   document.addEventListener('click', ()=> closePanels());
 
-  // Panel close buttons (also stop propagation)
   document.getElementById('closeEditPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
   document.getElementById('closeExportPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
   document.getElementById('closeActivityPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
@@ -841,9 +793,6 @@ document.addEventListener('DOMContentLoaded', () => {
     try { saveToFirebase(); } catch(e2){ console.error('clearActivity saveToFirebase', e2); }
   });
 
-  /* -------------------------
-     Editor open from panel button (should NOT close panel)
-     ------------------------- */
   openEditorBtnSmall.addEventListener('click', (e)=> {
     e.stopPropagation();
     closePanels();
@@ -851,9 +800,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAll();
   });
 
-  /* -------------------------
-     Bot token UI
-     ------------------------- */
   let tokenUnlocked = false;
   function updateTokenUI(){
     if(!tokenUnlocked){
@@ -872,7 +818,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const passcode = prompt('Enter passcode to unlock bot token');
     return passcode === '923623';
   }
-  // load token from localStorage
   try { BOT_TOKEN = localStorage.getItem('dispatch_bot_token') || ''; } catch(_){}
   if(BOT_TOKEN && botTokenInput){ botTokenInput.value = BOT_TOKEN; }
   updateTokenUI();
@@ -884,7 +829,6 @@ document.addEventListener('DOMContentLoaded', () => {
     BOT_TOKEN = botTokenInput.value.trim();
     try { localStorage.setItem('dispatch_bot_token', BOT_TOKEN); } catch(_){ }
     updateTokenUI();
-    // don't save bot token to firebase (kept local)
   });
   toggleTokenVisibilityBtn?.addEventListener('click', (e)=>{
     e.stopPropagation();
@@ -902,43 +846,25 @@ document.addEventListener('DOMContentLoaded', () => {
       if(!requirePasscode()) return;
       tokenUnlocked = true;
     } else {
-      // toggle lock on second click
       tokenUnlocked = false;
     }
     updateTokenUI();
   });
 
   /* -------------------------
-     Telegram send (image beacon + fetch retry for better reliability)
-     ------------------------- */
+     Telegram send (single message only, optimized for UAE WiFi restrictions)
+  ------------------------- */
   function sendTelegramMessage(chatId, text){
     if(!BOT_TOKEN || !chatId) return;
     const url = `https://api.telegram.org/bot${encodeURIComponent(BOT_TOKEN)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
-    // Try fetch with no-cors (this sends the request even if response is opaque),
-    // and also create Image as a second method. Retry a few times on short intervals.
-    let attempts = 0;
-    const maxAttempts = 3;
-    function attemptSend(){
-      attempts++;
-      try {
-        // fetch with no-cors (may be blocked sometimes, but often works to push the GET)
-        try {
-          fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' }).catch(()=>{});
-        } catch (e) {
-          // fetch may throw in some browsers (rare)
-        }
-        // image beacon fallback
-        const img = new Image();
-        img.src = url + `&_cb=${Date.now()}_${attempts}`;
-        // schedule retry if we haven't reached max
-        if(attempts < maxAttempts){
-          setTimeout(attemptSend, attempts * 900); // retry after ~0.9s, 1.8s...
-        }
-      } catch(err){
-        if(attempts < maxAttempts) setTimeout(attemptSend, attempts * 900);
-      }
+    try {
+      // one attempt only
+      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' }).catch(()=>{});
+      const img = new Image();
+      img.src = url + `&_cb=${Date.now()}`;
+    } catch(err){
+      // nothing else
     }
-    attemptSend();
   }
 
   function normalizeUaePhone(input){
@@ -947,7 +873,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if(s.startsWith('971')) return `+${s}`;
     if(s.startsWith('0')) s = s.substring(1);
     if(s.startsWith('5')) return `+971${s}`;
-    // fallback
     return `+971${s}`;
   }
 
@@ -955,17 +880,11 @@ document.addEventListener('DOMContentLoaded', () => {
     editorModalBack.style.display = 'none';
   });
 
-  // clicking inside editor should not close it
   document.querySelector('#editorModalBack .modal')?.addEventListener?.('click', e=> e.stopPropagation?.());
-
-  // clicking modal backdrop closes the editor
   editorModalBack.addEventListener('click', (e)=> {
     if(e.target === editorModalBack) editorModalBack.style.display = 'none';
   });
 
-  /* -------------------------
-     Zone modal open/close (counters)
-     ------------------------- */
   let activeCounter = null;
   document.querySelectorAll('.plus').forEach(b=>{
     b.addEventListener('click', (ev)=> {
@@ -980,16 +899,12 @@ document.addEventListener('DOMContentLoaded', () => {
   modalBack.addEventListener('click', (e)=> { if(e.target === modalBack) modalBack.style.display='none'; });
   zoneSearch.addEventListener('input', renderZonesForModal);
 
-  /* -------------------------
-     Assign zone -> counter (and send message)
-     ------------------------- */
   function assignZone(zid){
     const seq = state.nextSeq++;
     state.counters[activeCounter].push({ zid, seq });
     modalBack.style.display='none';
     renderCounters();
 
-    // pick first helper assigned to this zone (if any)
     const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === zid);
     const helper = helperId ? state.helpers[helperId] : null;
 
@@ -1002,23 +917,17 @@ document.addEventListener('DOMContentLoaded', () => {
       timestamp: new Date().toISOString()
     };
 
-    // activity: only log add
     state.activity.push(`${new Date().toLocaleString()} — ${payload.zone} token ${payload.token} added to ${payload.counter}`);
     renderActivity();
 
-    // Send Telegram message directly if possible (prepend helper name; otherwise unchanged)
     if(helper && helper.telegramId && BOT_TOKEN){
       const msg = `${helper.name} Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
       sendTelegramMessage(helper.telegramId, msg);
     }
 
-    // persist after assignment
     try { saveToFirebase(); } catch(e){ console.error('assignZone saveToFirebase', e); }
   }
 
-  /* -------------------------
-     Editor: add zone & helpers
-     ------------------------- */
   addZoneBtn.addEventListener('click', ()=> {
     const name = (newZoneName.value||'').trim();
     if(!name) return alert('Enter zone name');
@@ -1035,15 +944,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const telegramId = (helperTelegram.value||'').trim();
     const zid = zonesSelect.value || '';
     if(!name || !phone) return alert('Enter helper name & phone');
-    // UAE normalization: allow numbers without country code
     phone = normalizeUaePhone(phone);
     const editingId = helperName.dataset.editingId;
     if(editingId){
-      // allow changing helper ID
       const newId = prompt('Helper ID (optional to change):', editingId) || editingId;
       const finalId = newId.trim();
       if(finalId !== editingId && state.helpers[finalId]){ alert('Helper ID already exists'); return; }
-      // delete old and set new
       delete state.helpers[editingId];
       state.helpers[finalId] = { name, phone, telegramId, zid };
       delete helperName.dataset.editingId;
@@ -1055,14 +961,11 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAll();
   });
 
-  // Export CSV (simple)
   document.getElementById('exportCsvBtn').addEventListener('click', (e)=> {
     e.stopPropagation();
-    // build CSV for zones, helpers, counters
     let csv = 'type,id,name,extra\n';
     Object.keys(state.zones).forEach(zid=> csv += `zone,${zid},"${state.zones[zid].name}",\n`);
     Object.keys(state.helpers).forEach(hid=> csv += `helper,${hid},"${state.helpers[hid].name}","${state.helpers[hid].phone}|${state.helpers[hid].telegramId||''}|${state.helpers[hid].zid||''}"\n`);
-    // counters
     Object.keys(state.counters).forEach(cnt=>{
       state.counters[cnt].forEach(entry=>{
         csv += `counter,${cnt},"${state.zones[entry.zid]?.name||entry.zid}","token:${entry.seq}"\n`;
@@ -1074,13 +977,9 @@ document.addEventListener('DOMContentLoaded', () => {
     URL.revokeObjectURL(url);
   });
 
-  /* -------------------------
-     Sample seed data (only if DB empty)
-     ------------------------- */
   (function seedAndLoadFirebase(){
     loadFromFirebaseOnce().then(remote=>{
       if(remote){
-        // remote exists — use remote state
         try {
           Object.keys(state).forEach(k => delete state[k]);
           Object.assign(state, remote || {});
@@ -1088,7 +987,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(e){ console.error('apply remote on load', e); }
         renderAll();
       } else {
-        // no remote: create seeds and persist
         const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
         const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
         const z3 = 'z' + (state.nextZoneId++); state.zones[z3] = { name:'Sharjah' };
@@ -1097,7 +995,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }).catch(e=> {
       console.error('seedAndLoadFirebase error', e);
-      // fallback seed locally
       const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
       const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
       const z3 = 'z' + (state.nextZoneId++); state.zones[z3] = { name:'Sharjah' };
@@ -1105,22 +1002,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  /* -------------------------
-     Keyboard focus / a11y: focus counters when page loads
-     ------------------------- */
   const countersArea = document.getElementById('countersArea');
   setTimeout(()=> { countersArea.scrollIntoView({behavior:'smooth', block:'center'}); }, 120);
 
-  /* -------------------------
-     Prevent accidental closing while interacting with panels
-     ------------------------- */
-  // stopPropagation for panel content already set; also stop on controls container
   document.getElementById('topControls').addEventListener('click', e=> e.stopPropagation());
 
-  /* -------------------------
-     Finish: initial render (renderAll called after load)
-     ------------------------- */
-  // initial render handled in seed/load
 }); // DOMContentLoaded
 </script>
 </body>
