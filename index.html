@@ -41,11 +41,8 @@ body{
 .icon-btn img{ width:20px; height:20px; opacity:0.95 }
 
 /* floating panels - FORCE topmost and accept pointer events */
-.panel-pop{ position:fixed; z-index:9999999999 !important; background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(20,20,20,0.92)); border-radius:14px; padding:12px; box-shadow:0 30px 80px rgba(0,0,0,0.6); color:#eaeaea; display:none; min-width:280px; transition:opacity .18s ease, transform .18s ease; pointer-events:auto; }
-/* align left under icons */
-.panel-pop[data-anchor="edit"]{ transform-origin: left top; top:72px; left:24px; }
-.panel-pop[data-anchor="export"]{ transform-origin: left top; top:72px; left:92px; }
-.panel-pop[data-anchor="activity"]{ transform-origin: left top; top:72px; left:160px; }
+.panel-pop{ position:fixed; z-index:2147483647 !important; background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(20,20,20,0.92)); border-radius:14px; padding:12px; box-shadow:0 30px 80px rgba(0,0,0,0.6); color:#eaeaea; display:none; min-width:280px; transition:opacity .18s ease, transform .18s ease; pointer-events:auto; }
+/* anchor origin will be set in JS; default transform origin */
 .panel-pop.open{ display:block; opacity:1; transform: translateY(0); }
 .panel-pop.hidden{ opacity:0; transform: translateY(-6px); }
 
@@ -115,7 +112,7 @@ body{
             </div>
           </div>
 
-          <!-- Panels (kept inside left card but with high z-index) -->
+          <!-- Panels (we will move these to document.body on first open) -->
           <div class="panel-pop" id="editPanel" data-anchor="edit" aria-hidden="true">
             <h4>Edit</h4>
             <div style="font-size:13px;color:#ddd;margin-bottom:8px">Manage zones & helpers. Assign helper to zone so messages go automatically when added to counters.</div>
@@ -282,9 +279,19 @@ try {
    Configuration
    ------------------------- */
 let BOT_TOKEN = '';
+// key to read the Google Apps Script URL from localStorage
+const PROXY_CONFIG_KEY = 'dispatch_proxy_url';
+
+// keep a short-term sent set to prevent double-send (in-memory + persisted)
+const SENT_SET_KEY = 'dispatch_recent_sends'; // also stored in localStorage for persistence
+let sentSet = new Set();
+try {
+  const raw = localStorage.getItem(SENT_SET_KEY);
+  if(raw) JSON.parse(raw || '[]').forEach(k=> sentSet.add(k));
+} catch(e){}
 
 /* -------------------------
-   App state and main logic (unchanged)
+   App state and main logic (unchanged mostly)
    ------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   const state = {
@@ -319,25 +326,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const zoneSearch = document.getElementById('zoneSearch');
   const openEditorBtnSmall = document.getElementById('openEditorBtnSmall');
 
+  // panels: we'll move these to body to avoid stacking context issues
   const panels = {
     edit: document.getElementById('editPanel'),
     export: document.getElementById('exportPanel'),
     activity: document.getElementById('activityPanel')
   };
 
+  // move panel elements to document.body so they float above everything
+  Object.values(panels).forEach(p=>{
+    if(p && p.parentElement !== document.body){
+      document.body.appendChild(p);
+    }
+  });
+
   function positionPanel(panelEl, anchorEl){
     if(!panelEl || !anchorEl) return;
     panelEl.style.position = 'fixed';
+    // ensure visible so measurements work
+    const prevDisplay = panelEl.style.display;
+    panelEl.style.display = 'block';
+    panelEl.style.transform = 'translateY(0)';
     const r = anchorEl.getBoundingClientRect();
-    const desiredTop = r.bottom + 8;
+    const desiredTop = r.bottom + 8 + window.scrollY;
     const pw = panelEl.offsetWidth || 300;
-    const maxLeft = Math.max(8, window.innerWidth - pw - 8);
-    let left = Math.min(Math.max(r.left, 8), maxLeft);
-    panelEl.style.top = `${Math.min(desiredTop, window.innerHeight - panelEl.offsetHeight - 8)}px`;
+    // left aligned with icon (clamped)
+    let left = Math.max(8 + window.scrollX, Math.min(r.left + window.scrollX, window.innerWidth - pw - 8));
+    panelEl.style.top = `${Math.min(desiredTop, window.innerHeight + window.scrollY - panelEl.offsetHeight - 8)}px`;
     panelEl.style.left = `${left}px`;
-    if(getComputedStyle(panelEl).display === 'none'){
-      panelEl.style.display = '';
-    }
+    panelEl.style.zIndex = '2147483647';
+    if(prevDisplay) panelEl.style.display = prevDisplay;
   }
 
   const editIcon = document.getElementById('editIcon');
@@ -413,6 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
     logActivityLine('Stopped REST fallback; attempting realtime again.');
   }
 
+  // Try to start realtime listener with health detection (.info/connected)
   let infoConnectedListener = null;
   let dispatchStateListener = null;
   function startRealtimeListener(){
@@ -422,8 +441,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // reset flags
     realtimeConnected = false;
 
+    // listen to .info/connected to know if connection established
     try {
       if(infoConnectedListener) db.ref('.info/connected').off('value', infoConnectedListener);
     } catch(e){}
@@ -432,12 +453,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const val = snap && snap.val();
       if(val === true){
         realtimeConnected = true;
+        // if we had been using REST fallback, stop it
         if(usingRestFallback){
           stopRestPoll();
         }
         logActivityLine('Realtime DB connected (via .info/connected).');
       } else {
+        // when false: not connected; fallback
         realtimeConnected = false;
+        // start REST fallback if not already started
         startRestPoll();
       }
     };
@@ -446,6 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
       db.ref('.info/connected').on('value', infoConnectedListener);
     } catch(e){ console.warn('Error attaching .info/connected listener', e); startRestPoll(); }
 
+    // attach main state listener
     try {
       if(dispatchStateListener) db.ref('dispatch_state').off('value', dispatchStateListener);
     } catch(e){}
@@ -454,6 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if(!snap.exists()) return;
       try {
         const remote = snap.val();
+        // apply remote state to local state (replace)
         Object.keys(state).forEach(k => delete state[k]);
         Object.assign(state, remote || {});
         ensureStateShape();
@@ -467,8 +493,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       db.ref('dispatch_state').on('value', dispatchStateListener, (err) => {
         console.warn('Realtime listener error', err);
+        // on any listener error, fallback to REST polling
         startRestPoll();
       });
+      // set a short timer: if .info/connected doesn't flip true, fallback
       setTimeout(()=> {
         if(!realtimeConnected && !usingRestFallback){
           console.warn('Realtime did not connect within timeout — switching to REST fallback');
@@ -481,8 +509,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // call at startup attempt
   startRealtimeListener();
 
+  // If the window goes online, re-attempt realtime after short delay
   window.addEventListener('online', ()=> {
     setTimeout(()=> {
       if(usingRestFallback && db) {
@@ -492,6 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
   });
 
+  // When the page is hidden then shown, reattempt if in REST mode
   document.addEventListener('visibilitychange', ()=> {
     if(document.visibilityState === 'visible' && usingRestFallback && db){
       startRealtimeListener();
@@ -557,6 +588,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(e=> { console.error('loadFromFirebaseOnce (rest) error', e); return null; });
   }
 
+  /* -------------------------
+     Render helpers / zones / counters
+     ------------------------- */
   function renderZonesInEditor() {
     editorZonesList.innerHTML = '';
     zonesSelect.innerHTML = '<option value="">Assign zone</option>';
@@ -575,7 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
       left.innerHTML = `<div style="font-weight:700">${z.name}</div><div style="font-size:12px;color:#ccc">ID: <code>${zid}</code></div>`;
       const actions = document.createElement('div');
       actions.style.display = 'flex';
-      actions.style.gap='8px';
+      actions.style.gap = '8px';
       const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
       edit.addEventListener('click', ()=> {
         const newName = prompt('Zone name:', z.name) ?? z.name;
@@ -644,8 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
         helperName.focus();
       });
       actions.appendChild(edit); actions.appendChild(del);
-      div.appendChild(left);
-      div.appendChild(actions);
+      div.appendChild(left); div.appendChild(actions);
       helpersList.appendChild(div);
     });
   }
@@ -724,6 +757,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderActivity(){
+    // Only show lines about tokens added/removed
     const lines = (state.activity || []).slice(-200).reverse();
     const filtered = lines.filter(l => /\btoken\b/i.test(l) && (/\badded\b/i.test(l) || /\bremoved\b/i.test(l)));
     if(filtered.length === 0){
@@ -733,6 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // renderAll: persists to Firebase automatically
   function renderAll(){
     renderZonesInEditor();
     renderHelpersInEditor();
@@ -741,6 +776,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
   }
 
+  /* -------------------------
+     Interaction: open/close panels and editor
+     ------------------------- */
   function closePanels(){
     Object.values(panels).forEach(p=>{
       p.classList.remove('open');
@@ -765,17 +803,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // prevent clicks inside panels from closing them
   Object.values(panels).forEach(p=>{
     p.addEventListener('click', (ev)=> ev.stopPropagation());
   });
-  window.addEventListener('resize', ()=>{
+
+  // Reposition open panel(s) on resize or scroll to keep them under icons
+  function repositionOpenPanels(){
     Object.entries(panels).forEach(([name, p])=>{
       if(p.classList.contains('open')){
         const anchorMap = { edit: editIcon, export: exportIcon, activity: activityIcon };
         positionPanel(p, anchorMap[name]);
       }
     });
-  });
+  }
+  window.addEventListener('resize', repositionOpenPanels);
+  window.addEventListener('scroll', repositionOpenPanels);
 
   editIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('edit'); });
   exportIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('export'); });
@@ -793,6 +836,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try { saveToFirebase(); } catch(e2){ console.error('clearActivity saveToFirebase', e2); }
   });
 
+  /* -------------------------
+     Editor open from panel button (should NOT close panel)
+     ------------------------- */
   openEditorBtnSmall.addEventListener('click', (e)=> {
     e.stopPropagation();
     closePanels();
@@ -800,6 +846,9 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAll();
   });
 
+  /* -------------------------
+     Bot token UI
+     ------------------------- */
   let tokenUnlocked = false;
   function updateTokenUI(){
     if(!tokenUnlocked){
@@ -852,19 +901,77 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* -------------------------
-     Telegram send (single message only, optimized for UAE WiFi restrictions)
-  ------------------------- */
-  function sendTelegramMessage(chatId, text){
-    if(!BOT_TOKEN || !chatId) return;
-    const url = `https://api.telegram.org/bot${encodeURIComponent(BOT_TOKEN)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
+     Telegram send (proxy via Google Apps Script preferred)
+     - Single-send guarantee using 'sentSet'
+     ------------------------- */
+
+  // read configured Apps Script URL
+  function getAppsScriptUrl(){
     try {
-      // one attempt only
-      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' }).catch(()=>{});
+      const u = localStorage.getItem(PROXY_CONFIG_KEY);
+      if(u && typeof u === 'string' && u.trim()) return u.trim();
+    } catch(e){}
+    return '';
+  }
+
+  // persist sentSet (rolloff older entries to keep small)
+  function persistSentSet(){
+    try {
+      const arr = Array.from(sentSet).slice(-200); // keep last 200
+      localStorage.setItem(SENT_SET_KEY, JSON.stringify(arr));
+    } catch(e){}
+  }
+
+  async function sendViaAppsScript(appsUrl, botToken, chatId, text){
+    try {
+      const resp = await fetch(appsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ botToken, chatId, text }),
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      return resp && (resp.ok || resp.status === 200 || resp.status === 204);
+    } catch(e){
+      return false;
+    }
+  }
+
+  // fallback direct beacon (no-cors) + image
+  function sendDirectBeacon(botToken, chatId, text){
+    if(!botToken || !chatId) return;
+    const url = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
+    try {
+      try { fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' }).catch(()=>{}); } catch(_){}
       const img = new Image();
       img.src = url + `&_cb=${Date.now()}`;
-    } catch(err){
-      // nothing else
+    } catch(e){}
+  }
+
+  // single function that ensures single send
+  async function sendTelegramMessageSingle(chatId, text, uniqueKey){
+    if(!chatId || !text) return;
+    if(!BOT_TOKEN) {
+      try { BOT_TOKEN = localStorage.getItem('dispatch_bot_token') || ''; } catch(_){}
+      if(!BOT_TOKEN) return;
     }
+    // if we already sent this uniqueKey recently, skip
+    if(sentSet.has(uniqueKey)) return;
+    // mark as sent (optimistic) to prevent re-send during network retries
+    sentSet.add(uniqueKey);
+    persistSentSet();
+
+    // try Apps Script proxy first
+    const appsUrl = getAppsScriptUrl();
+    if(appsUrl){
+      const ok = await sendViaAppsScript(appsUrl, BOT_TOKEN, chatId, text);
+      if(ok) return;
+      // if not ok, remove the optimistic mark so fallback attempts can try later
+      // but keep duplicate protection for a short time (we'll still remove)
+    }
+
+    // fallback to direct beacon
+    sendDirectBeacon(BOT_TOKEN, chatId, text);
   }
 
   function normalizeUaePhone(input){
@@ -880,11 +987,17 @@ document.addEventListener('DOMContentLoaded', () => {
     editorModalBack.style.display = 'none';
   });
 
+  // clicking inside editor should not close it
   document.querySelector('#editorModalBack .modal')?.addEventListener?.('click', e=> e.stopPropagation?.());
+
+  // clicking modal backdrop closes the editor
   editorModalBack.addEventListener('click', (e)=> {
     if(e.target === editorModalBack) editorModalBack.style.display = 'none';
   });
 
+  /* -------------------------
+     Zone modal open/close (counters)
+     ------------------------- */
   let activeCounter = null;
   document.querySelectorAll('.plus').forEach(b=>{
     b.addEventListener('click', (ev)=> {
@@ -899,6 +1012,9 @@ document.addEventListener('DOMContentLoaded', () => {
   modalBack.addEventListener('click', (e)=> { if(e.target === modalBack) modalBack.style.display='none'; });
   zoneSearch.addEventListener('input', renderZonesForModal);
 
+  /* -------------------------
+     Assign zone -> counter (and send message)
+     ------------------------- */
   function assignZone(zid){
     const seq = state.nextSeq++;
     state.counters[activeCounter].push({ zid, seq });
@@ -917,17 +1033,25 @@ document.addEventListener('DOMContentLoaded', () => {
       timestamp: new Date().toISOString()
     };
 
+    // activity: only log add
     state.activity.push(`${new Date().toLocaleString()} — ${payload.zone} token ${payload.token} added to ${payload.counter}`);
     renderActivity();
 
-    if(helper && helper.telegramId && BOT_TOKEN){
+    // Send Telegram message once (proxy-first). Use uniqueKey to prevent duplicates
+    if(helper && helper.telegramId){
       const msg = `${helper.name} Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
-      sendTelegramMessage(helper.telegramId, msg);
+      const uniqueKey = `${payload.zoneId}_${payload.token}_${payload.counter}`;
+      // send asynchronously but single-shot
+      sendTelegramMessageSingle(helper.telegramId, msg, uniqueKey).catch(()=>{});
     }
 
+    // persist after assignment
     try { saveToFirebase(); } catch(e){ console.error('assignZone saveToFirebase', e); }
   }
 
+  /* -------------------------
+     Editor: add zone & helpers
+     ------------------------- */
   addZoneBtn.addEventListener('click', ()=> {
     const name = (newZoneName.value||'').trim();
     if(!name) return alert('Enter zone name');
@@ -961,6 +1085,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAll();
   });
 
+  // Export CSV (simple)
   document.getElementById('exportCsvBtn').addEventListener('click', (e)=> {
     e.stopPropagation();
     let csv = 'type,id,name,extra\n';
@@ -977,6 +1102,9 @@ document.addEventListener('DOMContentLoaded', () => {
     URL.revokeObjectURL(url);
   });
 
+  /* -------------------------
+     Sample seed data (only if DB empty)
+     ------------------------- */
   (function seedAndLoadFirebase(){
     loadFromFirebaseOnce().then(remote=>{
       if(remote){
@@ -1002,11 +1130,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
+  /* -------------------------
+     Keyboard focus / a11y: focus counters when page loads
+     ------------------------- */
   const countersArea = document.getElementById('countersArea');
   setTimeout(()=> { countersArea.scrollIntoView({behavior:'smooth', block:'center'}); }, 120);
 
+  /* -------------------------
+     Prevent accidental closing while interacting with panels
+     ------------------------- */
   document.getElementById('topControls').addEventListener('click', e=> e.stopPropagation());
 
+  /* -------------------------
+     Finish: initial render
+     ------------------------- */
+  // initial render handled in seed/load
 }); // DOMContentLoaded
 </script>
 </body>
