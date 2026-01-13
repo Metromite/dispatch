@@ -1,1224 +1,928 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Dispatch — Counters (Telegram Auto)</title>
-
-<!-- Firebase JS SDK (compat) -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>Dispatch Controller — Glass UI</title>
 <style>
+/* ---------- Base (desktop-first) ---------- */
 :root{
-  --glass-bg: rgba(255,255,255,0.04);
-  --glass-strong: rgba(255,255,255,0.12);
+  --glass-bg: rgba(255,255,255,0.08);
+  --glass-strong: rgba(255,255,255,0.15);
   --accent: #ffd700;
   --danger: #ff394f;
-  --shadow: rgba(0,0,0,0.35);
+  --shadow: rgba(0,0,0,0.25);
 }
-*{box-sizing:border-box} html,body{height:100%}
+
+html,body{height:100%}
 body{
   margin:0;
   min-height:100vh;
-  font-family: "SF Pro Display","Segoe UI",Roboto,system-ui,sans-serif;
-  color:#fff;
-  background: url('bg.jpg') center/cover no-repeat;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  background:url('bg.jpg') no-repeat center/cover;
+  background-size:cover;
+  font-family:'SF Pro Display','Segoe UI',Roboto,sans-serif;
+  color:white;
+  overflow:hidden;
   -webkit-font-smoothing:antialiased;
-  padding:26px;
-}
-/* layout */
-.app { max-width:1200px; margin:0 auto; display:grid; grid-template-columns: 280px 1fr; gap:18px; align-items:start; }
-.card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px; border-radius:14px; box-shadow: 0 12px 34px var(--shadow); backdrop-filter: blur(14px) saturate(140%); position:relative; z-index:1; }
-.header{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.h1{ font-size:20px; margin:0; }
-.small{ font-size:13px; color:#ddd; }
-.left { display:flex; flex-direction:column; gap:12px; position:relative; }
-
-/* controls (pinned on top-left visually) */
-.controls { display:flex; gap:10px; align-items:center; position:relative; z-index:10010; }
-.icon-btn{ width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border:1px solid rgba(255,255,255,0.04); box-shadow: 0 8px 30px var(--shadow); cursor:pointer; position:relative; z-index:10011; }
-.icon-btn img{ width:20px; height:20px; opacity:0.95 }
-
-/* floating panels - FORCE topmost and accept pointer events */
-.panel-pop{ position:fixed; z-index:2147483647 !important; background: linear-gradient(180deg, rgba(20,20,20,0.98), rgba(20,20,20,0.92)); border-radius:14px; padding:12px; box-shadow:0 30px 80px rgba(0,0,0,0.6); color:#eaeaea; display:none; min-width:280px; transition:opacity .18s ease, transform .18s ease; pointer-events:auto; }
-/* anchor origin will be set in JS; default transform origin */
-.panel-pop.open{ display:block; opacity:1; transform: translateY(0); }
-.panel-pop.hidden{ opacity:0; transform: translateY(-6px); }
-
-/* content inside panels */
-.panel-pop h4{ margin:0 0 8px 0; font-size:14px }
-.panel-row{ display:flex; gap:8px; align-items:center }
-.token-row{ display:flex; gap:8px; align-items:center; }
-.token-mask{ letter-spacing:2px; font-family:monospace; padding:8px 10px; background:rgba(255,255,255,0.02); border-radius:10px; border:1px solid rgba(255,255,255,0.03); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.token-actions .btn{ padding:6px 8px; font-size:13px }
-.input{ width:100%; padding:8px 10px; border-radius:10px; border:none; background:rgba(255,255,255,0.02); color:white; margin-top:8px; }
-.btn{ background:rgba(255,255,255,0.06); color:white; padding:8px 10px; border-radius:10px; border:none; cursor:pointer; box-shadow:0 8px 20px rgba(0,0,0,0.3); }
-
-/* main area: center counters horizontally and give focus */
-.main{ display:flex; flex-direction:column; gap:14px; align-items:center; z-index:0; }
-.header-main{ width:100%; display:flex; justify-content:space-between; align-items:center; }
-.counters-wrap{ width:100%; display:flex; justify-content:center; align-items:flex-start; }
-.counters{ display:flex; gap:24px; justify-content:center; align-items:flex-start; width:100%; max-width:820px; z-index:0; flex-wrap:wrap; }
-
-/* counter cards */
-.counter{ flex:1; min-height:220px; border-radius:14px; padding:16px; position:relative; background: rgba(255,255,255,0.03); box-shadow: 0 16px 40px rgba(0,0,0,0.5); display:flex; flex-direction:column; z-index:0; }
-.counter h3{ margin:0 0 10px 0; font-size:18px; }
-.plus{ position:absolute; right:14px; bottom:14px; width:56px; height:56px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:30px; cursor:pointer; background:rgba(255,255,255,0.04); box-shadow:0 16px 36px rgba(0,0,0,0.45); }
-.list{ display:flex; flex-direction:column; gap:10px; margin-top:6px; max-height:none; overflow:auto; padding-right:6px; }
-.entry{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:10px; background: rgba(0,0,0,0.06); }
-
-/* modal styles (editor & zone modal) */
-.modal-back{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background: rgba(0,0,0,0.5); z-index:10020; }
-.modal{ width:720px; max-width:95%; background: linear-gradient(180deg, rgba(15,15,15,0.98), rgba(15,15,15,0.94)); padding:18px; border-radius:14px; backdrop-filter:blur(10px); box-shadow:0 30px 120px rgba(0,0,0,0.8); color:white; max-height:86vh; overflow:auto; }
-.row{ display:flex; gap:8px; align-items:center; }
-.zone-row{ display:flex; justify-content:space-between; align-items:center; padding:10px; border-radius:10px; background: rgba(255,255,255,0.02); margin-bottom:8px; }
-.search{ width:100%; padding:8px; border-radius:10px; border:none; background: rgba(255,255,255,0.02); color:white; }
-
-/* editor specific */
-.editor-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
-.editor-card{ padding:12px; border-radius:10px; background: rgba(255,255,255,0.02); }
-.editor-list .editor-entry{ display:flex; justify-content:space-between; gap:12px; align-items:center; padding:8px; border-radius:8px; background:rgba(255,255,255,0.02); margin-bottom:8px; }
-.editor-list .editor-actions{ display:flex; gap:8px; align-items:center; }
-
-/* focus style to highlight counters visually */
-.counters.focused { box-shadow: 0 0 0 4px rgba(255,215,0,0.06) inset, 0 30px 80px rgba(0,0,0,0.45); border-radius:16px; padding:12px; }
-
-/* responsive */
-@media (max-width:980px){ .app{ grid-template-columns: 1fr; padding:12px; } .left{ order:2 } .counters{ flex-direction:column; gap:18px; } .editor-grid{ grid-template-columns:1fr; }
-
-}
-/* force dark select/dropdown */
-select, .search select, #helperZoneSelect{
-  background:#111 !important;
-  color:#fff !important;
-  border:1px solid rgba(255,255,255,0.12);
-  border-radius:10px;
-}
-select option{
-  background:#111;
-  color:#fff;
+  -moz-osx-font-smoothing:grayscale;
 }
 
-/* scrollbar styling to match UI */
-::-webkit-scrollbar{ width:10px; height:10px; }
-::-webkit-scrollbar-track{ background: rgba(255,255,255,0.06); border-radius:8px; }
-::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.18); border-radius:8px; }
-::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,0.28); }
+/* container holds app after login */
+.container{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  width:95%;
+  max-width:1300px;
+  padding-top:64px;
+  gap:30px;
+  position:relative;
+  box-sizing:border-box;
+}
 
-/* range slider styling to match UI */
-input[type="range"]{
-  -webkit-appearance:none;
-  appearance:none;
+/* pending area */
+.pending-zones{
+  display:flex;
+  justify-content:flex-start;
+  flex-wrap:wrap;
+  gap:15px;
+  padding:15px;
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px) saturate(180%);
+  border-radius:25px;
+  box-shadow:inset 0 0 25px rgba(255,255,255,0.1),0 0 20px rgba(0,0,0,0.2);
+  min-height:74px;
   width:100%;
-  background:transparent;
+  box-sizing:border-box;
+  overflow-y:auto;
 }
-input[type="range"]::-webkit-slider-runnable-track{
-  height:6px; background: rgba(255,255,255,0.18); border-radius:6px;
+
+/* zone card */
+.zone{
+  min-width:100px;
+  padding:10px 16px;
+  border-radius:14px;
+  text-align:center;
+  background:var(--glass-strong);
+  color:white;
+  backdrop-filter:blur(15px);
+  box-shadow:0 4px 15px var(--shadow);
+  cursor:grab;
+  transition:all .22s ease;
+  font-weight:500;
+  letter-spacing:.5px;
+  position:relative;
+  display:inline-flex;
+  flex-direction:column;
+  gap:6px;
+  align-items:center;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:manipulation;
 }
-input[type="range"]::-webkit-slider-thumb{
-  -webkit-appearance:none; appearance:none; margin-top:-6px;
-  width:18px; height:18px; border-radius:50%;
-  background: var(--accent);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+.zone:hover{transform:translateY(-4px) scale(1.05);background:rgba(255,255,255,0.25)}
+.zone:active{cursor:grabbing}
+
+/* bays */
+.dispatch-bays{
+  display:flex;
+  justify-content:space-between;
+  width:100%;
+  gap:20px;
+  box-sizing:border-box;
 }
-input[type="range"]::-moz-range-track{
-  height:6px; background: rgba(255,255,255,0.18); border-radius:6px;
+.bay{
+  flex:1;
+  min-height:150px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  padding:20px;
+  border-radius:20px;
+  background:rgba(255,255,255,0.07);
+  backdrop-filter:blur(15px) saturate(180%);
+  box-shadow:0 10px 30px var(--shadow),inset 0 0 15px rgba(255,255,255,0.1);
+  transition:background .3s ease;
+  gap:8px;
+  overflow-y:auto;
 }
-input[type="range"]::-moz-range-thumb{
-  width:18px; height:18px; border-radius:50%;
-  background: var(--accent);
-  border:none;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+.bay:hover{background:rgba(255,255,255,0.15)}
+
+.dispatched-zones{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:12px;
+  background:var(--glass-bg);
+  backdrop-filter:blur(18px) saturate(180%);
+  border-radius:20px;
+  box-shadow:inset 0 0 25px rgba(255,255,255,0.1),0 0 20px rgba(0,0,0,0.2);
+  padding:15px;
+  max-width:100%;
+  min-height:64px;
+  box-sizing:border-box;
+}
+
+/* badges & small text */
+.timer,.dispatched-time{display:block;margin-top:4px;font-size:.8rem;opacity:.85;color:var(--accent);text-shadow:0 0 8px rgba(0,0,0,.4)}
+.top-actions{position:absolute;top:8px;right:8px;display:flex;gap:12px;z-index:40}
+.action-btn{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);box-shadow:0 8px 20px var(--shadow);cursor:pointer;transition:transform .12s ease,background .12s ease}
+.action-btn:hover{transform:translateY(-3px);background:rgba(255,255,255,0.1)}
+.pending-controls{position:absolute;left:18px;top:-10px;z-index:30}
+.add-zone-btn{width:40px;height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.06);box-shadow:0 8px 18px var(--shadow);cursor:pointer}
+.add-zone-btn:hover{transform:translateY(-2px);background:rgba(255,255,255,0.1)}
+.minus-dot{position:absolute;top:-8px;left:-8px;width:22px;height:22px;border-radius:11px;background:var(--danger);color:white;display:flex;align-items:center;justify-content:center;font-weight:700;box-shadow:0 6px 12px rgba(0,0,0,0.35);cursor:pointer;transform:scale(0);transition:transform .12s ease;z-index:60}
+.zone.show-minus .minus-dot{transform:scale(1)}
+.seq-badge{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;border-radius:11px;padding:0 6px;display:flex;align-items:center;justify-content:center;background:var(--danger);color:white;font-size:12px;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,0.35);z-index:59;pointer-events:none;display:none}
+.name{font-weight:600}
+.bay::-webkit-scrollbar,.pending-zones::-webkit-scrollbar{height:8px;width:8px}
+.bay::-webkit-scrollbar-thumb,.pending-zones::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:4px}
+
+/* Login modal (glass) */
+#loginOverlay{position:fixed;inset:0;background:rgba(3,6,12,0.6);display:flex;align-items:center;justify-content:center;z-index:9999}
+#loginBox{width:360px;max-width:90%;padding:22px;border-radius:16px;background:linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));backdrop-filter: blur(16px) saturate(150%);box-shadow:0 10px 40px rgba(0,0,0,0.6);color:#fff;display:flex;flex-direction:column;gap:12px}
+#loginBox h3{margin:0;font-size:18px;font-weight:700}
+.login-row{display:flex;flex-direction:column;gap:6px}
+.login-row input{height:40px;border-radius:10px;padding:8px 12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:white;outline:none}
+.login-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.login-actions button{height:40px;border-radius:10px;padding:0 12px;background:rgba(255,255,255,0.06);border:none;color:white;cursor:pointer}
+.login-small{font-size:12px;opacity:.85}
+.login-link{font-size:12px;color:var(--accent);cursor:pointer;text-decoration:underline}
+
+/* small helper */
+.small-muted{font-size:12px;opacity:.8;color:#ddd}
+
+/* ---------- Responsive: tablet and mobile ---------- */
+
+/* tablet */
+@media (max-width: 1000px) {
+  .container{padding-top:48px;gap:18px}
+  .pending-zones{gap:12px;padding:12px;border-radius:20px;min-height:68px}
+  .zone{min-width:90px;padding:9px 12px;border-radius:12px;font-size:.95rem}
+  .dispatch-bays{gap:12px}
+  .bay{min-height:140px;padding:16px;border-radius:16px}
+  .top-actions{top:10px;right:10px}
+}
+
+/* mobile (phones) */
+@media (max-width: 640px) {
+  /* container uses smaller padding */
+  .container{padding-top:18px;gap:14px;width:98%;}
+
+  /* pending zones switch to single-line horizontal scroll for easier thumb use */
+  .pending-zones{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    padding:12px 10px;
+    gap:12px;
+    min-height:86px;
+  }
+  .pending-zones::-webkit-scrollbar{height:10px}
+  .pending-zones::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.06);border-radius:6px}
+
+  /* make zone cards more compact & touch-friendly */
+  .zone{min-width:88px;padding:12px 14px;border-radius:12px;font-size:0.95rem;box-shadow:0 8px 20px rgba(0,0,0,0.4)}
+  .zone .name{font-size:0.95rem}
+
+  /* stack bays vertically to avoid horizontal squish */
+  .dispatch-bays{flex-direction:column;gap:12px}
+  .bay{width:100%;min-height:120px;padding:14px;border-radius:14px;overflow:auto}
+
+  /* move top-actions to bottom fixed bar to avoid overlapping content */
+  .top-actions{
+    position:fixed;
+    left:10px;
+    right:10px;
+    bottom:12px;
+    top:auto;
+    justify-content:center;
+    gap:10px;
+    z-index:60;
+    display:flex;
+  }
+  .action-btn{width:48px;height:48px;border-radius:12px;font-size:18px}
+
+  /* make add button more prominent on mobile */
+  .pending-controls{position:fixed;right:12px;bottom:84px;left:auto;top:auto;z-index:60}
+  .add-zone-btn{width:52px;height:52px;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,0.6)}
+  .minus-dot{top:-10px;left:-10px;width:26px;height:26px;border-radius:13px}
+
+  /* login box full width */
+  #loginBox{width:92%;padding:20px}
+  #loginBox h3{font-size:17px}
+  .login-row input{height:44px;padding:12px 14px}
+  .login-actions button{height:44px;padding:8px 16px}
+}
+
+/* extra small phones */
+@media (max-width:420px) {
+  .zone{min-width:84px;padding:10px 12px}
+  .pending-zones{min-height:96px;padding:10px}
+  .bay{min-height:110px;padding:12px}
+  .action-btn{width:44px;height:44px}
+  .add-zone-btn{width:48px;height:48px}
 }
 </style>
 </head>
 <body>
-<div class="app">
-  <!-- left column (controls) -->
-  <div class="left">
-    <div class="card" style="position:relative;">
-      <div class="header">
-        <div>
-          <strong class="h1">Dispatch Controls</strong>
-          <div class="small">Counters & helpers</div>
-        </div>
-        <!-- pinned controls (icons) -->
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-          <div class="controls" id="topControls">
-            <div class="icon-btn" id="editIcon" title="Edit zones & helpers">
-              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z'/></svg>" alt="edit">
-            </div>
-            <div class="icon-btn" id="exportIcon" title="Export / More">
-              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 5 17 10'/><line x1='12' y1='5' x2='12' y2='19'/></svg>" alt="export">
-            </div>
-            <div class="icon-btn" id="activityIcon" title="Activity & Logs">
-              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M3 12h3l3 8 4-16 3 8h4'/></svg>" alt="activity">
-            </div>
-          </div>
-
-          <!-- Panels (we will move these to document.body on first open) -->
-          <div class="panel-pop" id="editPanel" data-anchor="edit" aria-hidden="true">
-            <h4>Edit</h4>
-            <div style="font-size:13px;color:#ddd;margin-bottom:8px">Manage zones & helpers. Assign helper to zone so messages go automatically when added to counters.</div>
-            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-              <div class="token-row">
-                <div class="token-mask" id="tokenMask">●●●●●●●●●●●●●●●●</div>
-              </div>
-              <div class="token-actions">
-                <button class="btn" id="revealTokenBtn">Show</button>
-                <button class="btn" id="openEditorBtnSmall">Open</button>
-              </div>
-            </div>
-            <div style="margin-top:8px;font-size:12px;color:#ccc">Use the editor to update helpers and zones.</div>
-            <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px">
-              <label for="botToken" style="font-size:12px;color:#ccc">Telegram Bot Token</label>
-              <input id="botToken" class="input" placeholder="123456:ABC..." type="password">
-              <div style="display:flex; gap:8px; justify-content:flex-end">
-                <button class="btn" id="toggleTokenVisibilityBtn">Show</button>
-                <button class="btn" id="saveBotTokenBtn">Save</button>
-              </div>
-            </div>
-            <div style="display:flex;justify-content:flex-end;margin-top:10px">
-              <button class="btn" id="closeEditPanelBtn">Close</button>
-            </div>
-          </div>
-
-          <div class="panel-pop" id="exportPanel" data-anchor="export" aria-hidden="true">
-            <h4>Export</h4>
-            <div style="font-size:13px;color:#ddd;">Export counters & helpers data.</div>
-            <div style="display:flex;justify-content:flex-end;margin-top:10px">
-              <button class="btn" id="exportCsvBtn">Export CSV</button>
-              <button class="btn" id="closeExportPanelBtn">Close</button>
-            </div>
-          </div>
-
-          <div class="panel-pop" id="activityPanel" data-anchor="activity" aria-hidden="true">
-            <h4>Activity</h4>
-            <div style="font-size:13px;color:#ddd;" id="activityContent">No recent activity yet.</div>
-            <div style="display:flex;justify-content:flex-end;margin-top:10px;gap:8px">
-              <button class="btn" id="clearActivityBtn">Clear</button>
-              <button class="btn" id="closeActivityPanelBtn">Close</button>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- removed the old warning per request -->
-      <div style="margin-top:12px"></div>
+<!-- Login overlay -->
+<div id="loginOverlay" style="display:flex">
+  <div id="loginBox" role="dialog" aria-modal="true">
+    <h3>Sign in — Dispatch Controller</h3>
+    <div class="login-row">
+      <label class="small-muted">Username</label>
+      <input id="loginUser" placeholder="Username" autocomplete="off" />
     </div>
-  </div>
-
-  <!-- main column -->
-  <div class="main">
-    <div class="header-main" style="width:100%;max-width:820px;">
-      <div><h2 style="margin:0">Dispatch — Counters</h2><div class="small" style="opacity:0.9">&nbsp;</div></div>
-      <div class="small" style="opacity:0.9">&nbsp;</div>
+    <div class="login-row">
+      <label class="small-muted">Password</label>
+      <input id="loginPass" type="password" placeholder="Password" autocomplete="off" />
     </div>
-
-    <div class="counters-wrap">
-      <div class="counters focused" id="countersArea" role="region" aria-label="Counters">
-        <div class="counter card" id="counter1" tabindex="0" aria-label="Counter 1">
-          <h3>Counter 1</h3>
-          <div class="list" id="list1" aria-live="polite"></div>
-          <div class="plus" data-counter="counter1" title="Add token to Counter 1">＋</div>
-        </div>
-        <div class="counter card" id="counter2" tabindex="0" aria-label="Counter 2">
-          <h3>Counter 2</h3>
-          <div class="list" id="list2" aria-live="polite"></div>
-          <div class="plus" data-counter="counter2" title="Add token to Counter 2">＋</div>
-        </div>
+    <div class="login-row" style="flex-direction:row;align-items:center;justify-content:space-between">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input id="rememberChk" type="checkbox" />
+        <span class="login-small">Remember (saved for this tab)</span>
+      </label>
+      <span class="login-small login-link" id="clearSaved" title="Clear saved credentials">Clear saved</span>
+    </div>
+    <div class="login-actions">
+      <div class="left"><!-- intentionally blank --></div>
+      <div>
+        <button id="loginBtn">Sign in</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Zone selection modal -->
-<div class="modal-back" id="modalBack">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="zoneSelectTitle">
-    <h3 id="zoneSelectTitle">Select Zone to Add</h3>
-    <input id="zoneSearch" class="search" placeholder="Type to search zones (predictive)">
-    <div id="zoneList" style="margin-top:12px; max-height:320px; overflow:auto"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-      <button id="modalCancel" class="btn">Close</button>
-    </div>
+<!-- Main app (hidden until login) -->
+<div class="container" style="display:none">
+  <div class="top-actions">
+    <div id="downloadBtn" class="action-btn" title="Download CSV">📊</div>
+    <div id="resetBtn" class="action-btn" title="Reset all to pending">🔄</div>
+    <div id="editToggleBtn" class="action-btn" title="Toggle edit mode">✏️</div>
   </div>
+
+  <div class="pending-controls">
+    <div id="addBtn" class="add-zone-btn" title="Add Zone">➕</div>
+  </div>
+
+  <div class="pending-zones" id="pendingZones">
+    <div class="zone" draggable="true" id="Fujairah"><span class="name">Fujairah</span></div>
+    <div class="zone" draggable="true" id="RasAlKhaimah"><span class="name">Ras Al Khaimah</span></div>
+    <div class="zone" draggable="true" id="JabalAli"><span class="name">Jabal Ali</span></div>
+    <div class="zone" draggable="true" id="AlQuoz2"><span class="name">Al Quoz 2</span></div>
+    <div class="zone" draggable="true" id="AlQuoz1"><span class="name">Al Quoz 1</span></div>
+    <div class="zone" draggable="true" id="Mirdiff"><span class="name">Mirdiff</span></div>
+    <div class="zone" draggable="true" id="BurDubai"><span class="name">Bur Dubai</span></div>
+    <div class="zone" draggable="true" id="SharjahBuhairah"><span class="name">Sharjah-Buhairah</span></div>
+    <div class="zone" draggable="true" id="Jumeirah"><span class="name">Jumeirah</span></div>
+    <div class="zone" draggable="true" id="AlQusais"><span class="name">Al Qusais</span></div>
+    <div class="zone" draggable="true" id="Deira"><span class="name">Deira</span></div>
+    <div class="zone" draggable="true" id="Ajman"><span class="name">Ajman</span></div>
+    <div class="zone" draggable="true" id="SharjahSanayia"><span class="name">Sharjah-Sanayia</span></div>
+  </div>
+
+  <div class="dispatch-bays">
+    <div class="bay" id="bulkBay"><h2>Bulk Bay</h2></div>
+    <div class="bay" id="bay4"><h2>Dispatch Bay 4</h2></div>
+    <div class="bay" id="bay3"><h2>Dispatch Bay 3</h2></div>
+    <div class="bay" id="bay2"><h2>Dispatch Bay 2</h2></div>
+    <!-- Modified heading for Bay 1: added small secondary text (urgent and government) as requested -->
+    <div class="bay" id="bay1"><h2>Dispatch Bay 1 <small style="display:block;font-size:12px;opacity:.8;margin-top:4px;">urgent · government</small></h2></div>
+  </div>
+
+  <div class="dispatched-zones" id="dispatchedZones"><h2>Dispatched Zones</h2></div>
 </div>
 
-<!-- Editor modal: manage zones & helpers -->
-<div class="modal-back" id="editorModalBack">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
-    <h3 id="editorTitle">Editor — Zones & Helpers</h3>
-    <div style="display:flex;gap:10px;margin-top:8px;">
-      <input id="newZoneName" class="search" placeholder="New zone name (e.g. Dubai)">
-      <button id="addZoneBtn" class="btn">Add Zone</button>
-    </div>
+<script type="module">
+/* ===== Firebase + App logic (UNCHANGED except Firebase config) ===== */
 
-    <div class="editor-grid" style="margin-top:12px;">
-      <div class="editor-card">
-        <h4 style="margin:0 0 8px 0">Zones</h4>
-        <div id="zonesList" class="editor-list" style="margin-top:8px; max-height:360px; overflow:auto"></div>
-      </div>
+// Global error handler to catch module loading failures
+window.addEventListener('error', (event) => {
+  console.error('Global error:', event.error, event.filename);
+  if (event.filename && (event.filename.includes('firebase') || event.filename.includes('index-8'))) {
+    console.error('Module loading error:', event.error);
+    if (event.error && event.error.message && event.error.message.includes('Failed to fetch')) {
+      console.warn('Network error detected, will retry...');
+    }
+  }
+}, true);
 
-      <div class="editor-card">
-        <h4 style="margin:0 0 8px 0">Helpers</h4>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <input id="helperName" class="search" placeholder="Helper name">
-          <input id="helperPhone" class="search" placeholder="Phone (with country code)">
-          <input id="helperTelegram" class="search" placeholder="Telegram ID (optional)">
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <select id="helperZoneSelect" class="search" style="min-width:160px"><option value="">Assign zone</option></select>
-          <button id="addHelperBtn" class="btn">Add Helper</button>
-        </div>
-        <div id="helpersList" class="editor-list" style="max-height:300px; overflow:auto"></div>
-      </div>
-    </div>
+// Catch unhandled promise rejections
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason);
+  if (event.reason && typeof event.reason === 'object') {
+    const msg = event.reason.message || String(event.reason);
+    if (msg.includes('firebase') || msg.includes('Failed to fetch') || event.reason.code) {
+      console.warn('Firebase-related error caught:', event.reason);
+      event.preventDefault();
+    }
+  }
+});
 
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
-      <button id="closeEditorBtn" class="btn">Close</button>
-    </div>
-  </div>
-</div>
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.3.1/firebase-app.js";
+import { getDatabase, ref, set, onValue, update, remove, runTransaction, get } from "https://www.gstatic.com/firebasejs/10.3.1/firebase-database.js";
 
-<script>
-/* -------------------------
-   FIREBASE CONFIG & INIT
-   ------------------------- */
-/*
-  NOTE: If your Realtime Database URL differs, replace databaseURL below
-  with the exact URL from Firebase Console -> Realtime Database.
-*/
-const firebaseConfig = {
-  apiKey: "AIzaSyDk_IDJAQZMBNtu57i_ls6wCsi3tzX19-A",
-  authDomain: "helper-bb456.firebaseapp.com",
-  databaseURL: "https://helper-bb456-default-rtdb.firebaseio.com",
-  projectId: "helper-bb456",
-  storageBucket: "helper-bb456.firebasestorage.app",
-  messagingSenderId: "11179124401",
-  appId: "1:11179124401:web:95bffde8f57e8f57962490",
-  measurementId: "G-2FPWGR4KH2"
-};
-
-let db = null;
-let usingRestFallback = false;
-let restPollIntervalId = null;
-let realtimeConnected = false;
-const REST_POLL_MS = 3000;
-
-// convenience base URL for Realtime DB REST
-const RTDB_REST_BASE = (firebaseConfig.databaseURL || '').replace(/\/$/,'');
-
-/* initialize compat SDK and try to setup real-time */
+// Ensure Firebase is only initialized once
+let app, db;
 try {
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.database();
-  console.info('Firebase initialized (compat)');
-} catch (e) {
-  console.error('Firebase init error', e);
-  db = null;
+  const firebaseConfig = {
+    apiKey: "AIzaSyDgtEbSRPDfr3sPPusdiLjD_2zonzREgaw",
+    authDomain: "jan26-database.firebaseapp.com",
+    databaseURL: "https://jan26-database-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "jan26-database",
+    storageBucket: "jan26-database.firebasestorage.app",
+    messagingSenderId: "501382009726",
+    appId: "1:501382009726:web:6d5cfb9cc04621bcb1592f",
+    measurementId: "G-G66JG9G8V9"
+  };
+
+  const existingApps = getApps();
+  if (existingApps.length > 0) {
+    app = existingApps[0];
+  } else {
+    app = initializeApp(firebaseConfig);
+  }
+  db = getDatabase(app);
+} catch (error) {
+  console.error('Firebase initialization error:', error);
 }
 
-/* -------------------------
-   Configuration
-   ------------------------- */
-let BOT_TOKEN = '';
-// key to read the Google Apps Script URL from localStorage
-const PROXY_CONFIG_KEY = 'dispatch_proxy_url';
-
-// keep a short-term sent set to prevent double-send (in-memory + persisted)
-const SENT_SET_KEY = 'dispatch_recent_sends'; // also stored in localStorage for persistence
-let sentSet = new Set();
-try {
-  const raw = localStorage.getItem(SENT_SET_KEY);
-  if(raw) JSON.parse(raw || '[]').forEach(k=> sentSet.add(k));
-} catch(e){}
-
-/* -------------------------
-   App state and main logic (unchanged mostly)
-   ------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
-  const state = {
-    zones: {},        // { zid: { name } }
-    helpers: {},      // { hid: { name, phone, telegramId, zid } }
-    counters: { counter1: [], counter2: [] }, // arrays of { zid, seq }
-    nextSeq: 1,
-    nextZoneId: 1,
-    nextHelperId: 1,
-    activity: []
-  };
-
-  function ensureStateShape(){
-    if(!state || typeof state !== 'object') return;
-    state.zones = state.zones && typeof state.zones === 'object' ? state.zones : {};
-    state.helpers = state.helpers && typeof state.helpers === 'object' ? state.helpers : {};
-
-    if(!state.counters || typeof state.counters !== 'object') state.counters = { counter1: [], counter2: [] };
-
-    // If Firebase returned objects instead of arrays, convert to arrays (preserve seq order)
-    if(!Array.isArray(state.counters.counter1) && state.counters.counter1 && typeof state.counters.counter1 === 'object'){
-      state.counters.counter1 = Object.values(state.counters.counter1).filter(Boolean).sort((a,b)=> (a.seq||0)-(b.seq||0));
-    }
-    if(!Array.isArray(state.counters.counter2) && state.counters.counter2 && typeof state.counters.counter2 === 'object'){
-      state.counters.counter2 = Object.values(state.counters.counter2).filter(Boolean).sort((a,b)=> (a.seq||0)-(b.seq||0));
-    }
-
-    if(!Array.isArray(state.counters.counter1)) state.counters.counter1 = [];
-    if(!Array.isArray(state.counters.counter2)) state.counters.counter2 = [];
-
-    // Ensure nextSeq is ahead of any existing tokens
-    const maxSeq = Math.max(0, ...state.counters.counter1.map(e=> e && e.seq || 0), ...state.counters.counter2.map(e=> e && e.seq || 0));
-    state.nextSeq = Number.isFinite(state.nextSeq) ? Math.max(state.nextSeq, maxSeq+1) : (maxSeq+1);
-
-    state.nextZoneId = Number.isFinite(state.nextZoneId) ? state.nextZoneId : 1;
-    state.nextHelperId = Number.isFinite(state.nextHelperId) ? state.nextHelperId : 1;
-    state.activity = Array.isArray(state.activity) ? state.activity : [];
-  }
-
-  // Elements
-  const list1 = document.getElementById('list1');
-  const list2 = document.getElementById('list2');
-  const modalBack = document.getElementById('modalBack');
-  const editorModalBack = document.getElementById('editorModalBack');
-  const zoneList = document.getElementById('zoneList');
-  const zoneSearch = document.getElementById('zoneSearch');
-  const openEditorBtnSmall = document.getElementById('openEditorBtnSmall');
-
-  // panels: we'll move these to body to avoid stacking context issues
-  const panels = {
-    edit: document.getElementById('editPanel'),
-    export: document.getElementById('exportPanel'),
-    activity: document.getElementById('activityPanel')
-  };
-
-  // move panel elements to document.body so they float above everything
-  Object.values(panels).forEach(p=>{
-    if(p && p.parentElement !== document.body){
-      document.body.appendChild(p);
+// Wait for DOM to be fully ready
+function ensureDOMReady() {
+  return new Promise((resolve) => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', resolve);
+    } else {
+      resolve();
     }
   });
+}
 
-  function positionPanel(panelEl, anchorEl){
-    if(!panelEl || !anchorEl) return;
-    panelEl.style.position = 'fixed';
-    // ensure visible so measurements work
-    const prevDisplay = panelEl.style.display;
-    panelEl.style.display = 'block';
-    panelEl.style.transform = 'translateY(0)';
-    const r = anchorEl.getBoundingClientRect();
-    const desiredTop = r.bottom + 8 + window.scrollY;
-    const pw = panelEl.offsetWidth || 300;
-    // left aligned with icon (clamped)
-    let left = Math.max(8 + window.scrollX, Math.min(r.left + window.scrollX, window.innerWidth - pw - 8));
-    panelEl.style.top = `${Math.min(desiredTop, window.innerHeight + window.scrollY - panelEl.offsetHeight - 8)}px`;
-    panelEl.style.left = `${left}px`;
-    panelEl.style.zIndex = '2147483647';
-    if(prevDisplay) panelEl.style.display = prevDisplay;
+// Get DOM elements with error checking
+function getElement(id, required = true) {
+  const el = document.getElementById(id);
+  if (!el && required) {
+    console.error(`Required element not found: ${id}`);
+    throw new Error(`Required element not found: ${id}`);
   }
+  return el;
+}
 
-  const editIcon = document.getElementById('editIcon');
-  const exportIcon = document.getElementById('exportIcon');
-  const activityIcon = document.getElementById('activityIcon');
+// Wait for DOM, then get elements
+await ensureDOMReady();
 
-  // Editor elements
-  const editorZonesList = document.getElementById('zonesList');
-  const zonesSelect = document.getElementById('helperZoneSelect');
-  const addZoneBtn = document.getElementById('addZoneBtn');
-  const newZoneName = document.getElementById('newZoneName');
-  const addHelperBtn = document.getElementById('addHelperBtn');
-  const helperName = document.getElementById('helperName');
-  const helperPhone = document.getElementById('helperPhone');
-  const helpersList = document.getElementById('helpersList');
-  const helperTelegram = document.getElementById('helperTelegram');
-  const botTokenInput = document.getElementById('botToken');
-  const saveBotTokenBtn = document.getElementById('saveBotTokenBtn');
-  const toggleTokenVisibilityBtn = document.getElementById('toggleTokenVisibilityBtn');
-  const revealTokenBtn = document.getElementById('revealTokenBtn');
-  const tokenMask = document.getElementById('tokenMask');
+const loginOverlay = getElement('loginOverlay');
+const loginBox = getElement('loginBox');
+const loginBtn = getElement('loginBtn');
+const loginUser = getElement('loginUser');
+const loginPass = getElement('loginPass');
+const rememberChk = getElement('rememberChk');
+const clearSaved = getElement('clearSaved');
 
-  // Activity content box
-  const activityContent = document.getElementById('activityContent');
+const containerEl = document.querySelector('.container');
+if (!containerEl) throw new Error('Container element not found');
 
-  /* -------------------------
-     Firebase <-> REST fallback helpers
-     ------------------------- */
+const pendingArea = getElement('pendingZones');
+const dispatchedArea = getElement('dispatchedZones');
+const bays = document.querySelectorAll('.bay');
+if (bays.length === 0) throw new Error('No bay elements found');
 
-  function logActivityLine(line){
-    state.activity.push(`${new Date().toLocaleString()} — ${line}`);
-    renderActivity();
+const addBtn = getElement('addBtn');
+const editToggleBtn = getElement('editToggleBtn');
+const resetBtn = getElement('resetBtn');
+const downloadBtn = getElement('downloadBtn');
+
+let editMode = false;
+let appStarted = false;
+
+/* ---------------------------
+   AUTH: localStorage-based remember
+*/
+function saveCredentials(username, password) {
+  try { 
+    localStorage.setItem('dispatch_credentials', JSON.stringify({ username, password })); 
+  } catch(e){
+    console.warn('localStorage not available:', e);
   }
-
-  // start REST polling (GET) to fetch DB every REST_POLL_MS
-  function startRestPoll(){
-    if(usingRestFallback) return;
-    usingRestFallback = true;
-    if(db && typeof db.ref === 'function'){
-      try {
-        db.ref('dispatch_state').off();
-      } catch(e){}
-    }
-    logActivityLine('Realtime not available — switching to REST fallback (polling).');
-    restPollIntervalId = setInterval(()=> {
-      fetch(`${RTDB_REST_BASE}/dispatch_state.json`)
-        .then(r => {
-          if(!r.ok) throw new Error('REST GET failed');
-          return r.json();
-        })
-        .then(remote => {
-          if(remote){
-            try {
-              Object.keys(state).forEach(k => delete state[k]);
-              Object.assign(state, remote || {});
-              ensureStateShape();
-              renderAllNoSave();
-            } catch(e){
-              console.error('apply remote (REST) error', e);
-            }
-          }
-        })
-        .catch(err => {
-          console.warn('REST poll error', err);
-        });
-    }, REST_POLL_MS);
+}
+function clearSavedCredentials() {
+  try { 
+    localStorage.removeItem('dispatch_credentials'); 
+  } catch(e){
+    console.warn('localStorage not available:', e);
   }
-
-  function stopRestPoll(){
-    if(restPollIntervalId) clearInterval(restPollIntervalId);
-    restPollIntervalId = null;
-    usingRestFallback = false;
-    logActivityLine('Stopped REST fallback; attempting realtime again.');
+}
+function getSavedCredentials() {
+  try { 
+    const s = localStorage.getItem('dispatch_credentials'); 
+    return s ? JSON.parse(s) : null; 
+  } catch(e){ 
+    console.warn('localStorage not available:', e);
+    return null; 
   }
+}
 
-  // Try to start realtime listener with health detection (.info/connected)
-  let infoConnectedListener = null;
-  let dispatchStateListener = null;
-  function startRealtimeListener(){
-    if(!db || !db.ref) {
-      console.info('No db available to start realtime; will use REST fallback');
-      startRestPoll();
+function showAppAndHideLogin() {
+  loginOverlay.style.display = 'none';
+  containerEl.style.display = '';
+  startApp();
+}
+
+function showLogin() {
+  loginOverlay.style.display = 'flex';
+  containerEl.style.display = 'none';
+}
+
+(function initAuth() {
+  const saved = getSavedCredentials();
+  const wasLoggedIn = sessionStorage.getItem('dispatch_logged_in') === 'true';
+  
+  if (saved && saved.username && saved.password) {
+    loginUser.value = saved.username;
+    loginPass.value = saved.password;
+    rememberChk.checked = true;
+    
+    if (wasLoggedIn && saved.username === 'admin' && saved.password === '0000') {
+      const checkFirebase = setInterval(() => {
+        if (db) {
+          clearInterval(checkFirebase);
+          showAppAndHideLogin();
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(checkFirebase);
+        if (!db) {
+          showLogin();
+        }
+      }, 3000);
       return;
     }
+  } else {
+    loginUser.value = '';
+    loginPass.value = '';
+    rememberChk.checked = false;
+  }
+  showLogin();
+})();
 
-    // reset flags
-    realtimeConnected = false;
+clearSaved.addEventListener('click', () => {
+  clearSavedCredentials();
+  try {
+    sessionStorage.removeItem('dispatch_logged_in');
+  } catch(e) {}
+  rememberChk.checked = false;
+  loginUser.value = '';
+  loginPass.value = '';
+  alert('Saved credentials cleared.');
+});
 
-    // listen to .info/connected to know if connection established
+loginBtn.addEventListener('click', () => {
+  const u = (loginUser.value || '').trim();
+  const p = (loginPass.value || '').trim();
+  if (u === 'admin' && p === '0000') {
+    if (rememberChk.checked) {
+      saveCredentials(u,p);
+    } else {
+      clearSavedCredentials();
+    }
     try {
-      if(infoConnectedListener) db.ref('.info/connected').off('value', infoConnectedListener);
-    } catch(e){}
+      sessionStorage.setItem('dispatch_logged_in', 'true');
+    } catch(e) {
+      console.warn('SessionStorage not available (may be blocked by privacy settings):', e);
+    }
+    showAppAndHideLogin();
+  } else {
+    alert('Invalid credentials. Use username: admin, password: 0000');
+  }
+});
 
-    infoConnectedListener = (snap) => {
-      const val = snap && snap.val();
-      if(val === true){
-        realtimeConnected = true;
-        // if we had been using REST fallback, stop it
-        if(usingRestFallback){
-          stopRestPoll();
-        }
-        logActivityLine('Realtime DB connected (via .info/connected).');
-      } else {
-        // when false: not connected; fallback
-        realtimeConnected = false;
-        // start REST fallback if not already started
-        startRestPoll();
+/* ---------------------------
+   Sequence logic
+*/
+async function assignSequenceFirebase(zoneId) {
+  if (!db) {
+    console.error('Firebase not initialized');
+    return null;
+  }
+  const tx = await runTransaction(ref(db, 'meta/nextSequence'), (cur) => {
+    if (cur == null) return 1;
+    return Number(cur) + 1;
+  });
+  const assigned = tx.snapshot.val();
+  if (assigned != null) {
+    await update(ref(db, 'zones/' + zoneId), { sequenceNumber: assigned });
+  }
+  return assigned;
+}
+
+async function freeSequenceFirebase(zoneId) {
+  if (!db) {
+    console.error('Firebase not initialized');
+    return;
+  }
+  const snap = await get(ref(db, 'zones/' + zoneId + '/sequenceNumber'));
+  if (!snap.exists()) return;
+  const num = snap.val();
+  if (num == null) return;
+  const freedNum = Number(num);
+  if (isNaN(freedNum)) return;
+  const txZones = await runTransaction(ref(db, 'zones'), (cur) => {
+    if (!cur) return cur;
+    for (const k of Object.keys(cur)) {
+      if (!cur[k]) continue;
+      const s = cur[k].sequenceNumber;
+      if (s == null) continue;
+      const sNum = Number(s);
+      if (k === zoneId) {
+        cur[k].sequenceNumber = null;
+      } else if (sNum > freedNum) {
+        cur[k].sequenceNumber = sNum - 1;
       }
-    };
-
-    try {
-      db.ref('.info/connected').on('value', infoConnectedListener);
-    } catch(e){ console.warn('Error attaching .info/connected listener', e); startRestPoll(); }
-
-    // attach main state listener
-    try {
-      if(dispatchStateListener) db.ref('dispatch_state').off('value', dispatchStateListener);
-    } catch(e){}
-
-    dispatchStateListener = (snap) => {
-      if(!snap.exists()) return;
-      try {
-        const remote = snap.val();
-        // apply remote state to local state (replace)
-        Object.keys(state).forEach(k => delete state[k]);
-        Object.assign(state, remote || {});
-        ensureStateShape();
-        renderAllNoSave();
-        console.info('State updated from Firebase (realtime).');
-      } catch(e){
-        console.error('Error applying remote state', e);
-      }
-    };
-
-    try {
-      db.ref('dispatch_state').on('value', dispatchStateListener, (err) => {
-        console.warn('Realtime listener error', err);
-        // on any listener error, fallback to REST polling
-        startRestPoll();
-      });
-      // set a short timer: if .info/connected doesn't flip true, fallback
-      setTimeout(()=> {
-        if(!realtimeConnected && !usingRestFallback){
-          console.warn('Realtime did not connect within timeout — switching to REST fallback');
-          startRestPoll();
-        }
-      }, 5500);
-    } catch(e){
-      console.error('Error attaching dispatch_state listener', e);
-      startRestPoll();
+    }
+    return cur;
+  });
+  if (!txZones.committed) return;
+  const updatedZones = txZones.snapshot.val() || {};
+  let maxAssigned = 0;
+  for (const k in updatedZones) {
+    const v = updatedZones[k];
+    if (!v) continue;
+    const s = v.sequenceNumber;
+    if (s != null) {
+      const n = Number(s);
+      if (!isNaN(n) && n > maxAssigned) maxAssigned = n;
     }
   }
-
-  // call at startup attempt
-  startRealtimeListener();
-
-  // If the window goes online, re-attempt realtime after short delay
-  window.addEventListener('online', ()=> {
-    setTimeout(()=> {
-      if(usingRestFallback && db) {
-        logActivityLine('Network back — attempting to re-enable realtime listener.');
-        startRealtimeListener();
-      }
-    }, 1200);
+  await runTransaction(ref(db, 'meta/nextSequence'), (cur) => {
+    return Number(maxAssigned);
   });
+  try { await set(ref(db, 'meta/freeNumbers'), []); } catch (e){}
+}
 
-  // When the page is hidden then shown, reattempt if in REST mode
-  document.addEventListener('visibilitychange', ()=> {
-    if(document.visibilityState === 'visible' && usingRestFallback && db){
-      startRealtimeListener();
-    }
-  });
+/* ---------------------------
+   UI initialization functions
+*/
+function initZone(zone) {
+  if (zone._inited) return;
+  zone._inited = true;
 
-  /* -------------------------
-     SaveToFirebase (writes)
-     ------------------------- */
-  function saveToFirebase(){
-    if(db && !usingRestFallback){
-      try {
-        db.ref('dispatch_state').set(state).catch(err=>{
-          console.error('saveToFirebase error (sdk)', err);
-          saveToFirebaseRest();
-        });
+  if (!zone.querySelector('.name')) {
+    const n = document.createElement('span'); n.className = 'name'; n.textContent = zone.id; zone.appendChild(n);
+  }
+  if (!zone.querySelector('.seq-badge')) {
+    const sb = document.createElement('div'); sb.className = 'seq-badge'; zone.appendChild(sb);
+  }
+  if (!zone.querySelector('.minus-dot')) {
+    const md = document.createElement('div'); md.className = 'minus-dot'; md.textContent = '–';
+    md.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!editMode) return;
+      if (!confirm('Delete zone "' + (zone.querySelector('.name')?.textContent || zone.id) + '"?')) return;
+      if (!db) {
+        alert('Database not ready. Please refresh the page.');
         return;
-      } catch(e){
-        console.error('saveToFirebase exception (sdk)', e);
-        saveToFirebaseRest();
-        return;
       }
-    }
-    saveToFirebaseRest();
-  }
-
-  function saveToFirebaseRest(){
-    if(!RTDB_REST_BASE) { console.error('No REST base URL'); return; }
-    try {
-      fetch(`${RTDB_REST_BASE}/dispatch_state.json`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(state)
-      }).then(resp => {
-        if(!resp.ok) throw new Error('REST PUT failed');
-        return resp.json();
-      }).then(() => {
-        console.info('Saved via REST PUT');
-      }).catch(err => {
-        console.warn('REST PUT save error', err);
-      });
-    } catch(e){
-      console.error('saveToFirebaseRest exception', e);
-    }
-  }
-
-  function loadFromFirebaseOnce(){
-    if(db && !usingRestFallback){
-      return db.ref('dispatch_state').once('value').then(snap=>{
-        if(!snap.exists()) return null;
-        return snap.val();
-      }).catch(e=> {
-        console.error('loadFromFirebaseOnce (sdk) error', e);
-        return fetch(`${RTDB_REST_BASE}/dispatch_state.json`).then(r=>{
-          if(!r.ok) return null;
-          return r.json();
-        }).catch(()=> null);
-      });
-    }
-    return fetch(`${RTDB_REST_BASE}/dispatch_state.json`).then(r=>{
-      if(!r.ok) return null;
-      return r.json();
-    }).catch(e=> { console.error('loadFromFirebaseOnce (rest) error', e); return null; });
-  }
-
-  /* -------------------------
-     Render helpers / zones / counters
-     ------------------------- */
-  function renderZonesInEditor() {
-    editorZonesList.innerHTML = '';
-    // Preserve current selection to avoid losing user's choice during background re-renders
-    const prevSelection = zonesSelect.value;
-    zonesSelect.innerHTML = '<option value="">Assign zone</option>';
-    Object.keys(state.zones).forEach(zid => {
-      const z = state.zones[zid];
-      const div = document.createElement('div');
-      div.className = 'editor-entry';
-      div.style.display = 'flex';
-      div.style.justifyContent = 'space-between';
-      div.style.alignItems = 'center';
-      div.style.padding = '8px';
-      div.style.marginBottom = '8px';
-      div.style.borderRadius = '8px';
-      div.style.background = 'rgba(255,255,255,0.02)';
-      const left = document.createElement('div');
-      left.innerHTML = `<div style="font-weight:700">${z.name}</div><div style="font-size:12px;color:#ccc">ID: <code>${zid}</code></div>`;
-      const actions = document.createElement('div');
-      actions.style.display = 'flex';
-      actions.style.gap = '8px';
-      const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
-      edit.addEventListener('click', ()=> {
-        const newName = prompt('Zone name:', z.name) ?? z.name;
-        let newId = prompt('Zone ID:', zid) ?? zid;
-        newId = (newId||'').trim();
-        if(!newId) return;
-        if(newId !== zid){
-          if(state.zones[newId]){ alert('ID already exists'); return; }
-          state.zones[newId] = { name: newName };
-          delete state.zones[zid];
-          Object.keys(state.helpers).forEach(hid=>{ if(state.helpers[hid].zid===zid) state.helpers[hid].zid=newId; });
-          Object.keys(state.counters).forEach(cnt=>{
-            state.counters[cnt] = state.counters[cnt].map(e=> e.zid===zid? {...e, zid:newId}: e);
-          });
-        } else {
-          state.zones[zid].name = newName;
-        }
-        renderAll();
-      });
-      const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
-      del.addEventListener('click', ()=> {
-        delete state.zones[zid];
-        Object.keys(state.helpers).forEach(hid=>{
-          if(state.helpers[hid].zid === zid) state.helpers[hid].zid = '';
-        });
-        renderAll();
-      });
-      actions.appendChild(edit);
-      actions.appendChild(del);
-      div.appendChild(left);
-      div.appendChild(actions);
-      editorZonesList.appendChild(div);
-
-      const opt = document.createElement('option');
-      opt.value = zid; opt.text = z.name;
-      zonesSelect.appendChild(opt);
+      await freeSequenceFirebase(zone.id);
+      await update(ref(db, 'zones/' + zone.id), { deleted: true });
+      zone.remove();
     });
-    // Restore previous selection if it still exists among options
-    if(prevSelection && Array.from(zonesSelect.options).some(o => o.value === prevSelection)){
-      zonesSelect.value = prevSelection;
+    zone.appendChild(md);
+  }
+  if (!zone.querySelector('.timer')) {
+    const t = document.createElement('span'); t.className = 'timer'; t.style.display = 'none'; zone.appendChild(t);
+  }
+  if (!zone.querySelector('.dispatched-time')) {
+    const d = document.createElement('span'); d.className = 'dispatched-time'; d.style.display = 'none'; zone.appendChild(d);
+  }
+
+  zone.addEventListener('click', (ev) => {
+    if (!editMode) return;
+    ev.stopPropagation();
+    const cur = zone.querySelector('.name')?.textContent || zone.id;
+    const newName = prompt('Rename zone:', cur);
+    if (newName && newName.trim() && db) {
+      update(ref(db, 'zones/' + zone.id), { name: newName.trim() });
     }
-  }
-
-  function renderHelpersInEditor(){
-    helpersList.innerHTML = '';
-    Object.keys(state.helpers).forEach(hid=>{
-      const h = state.helpers[hid];
-      const div = document.createElement('div');
-      div.className='editor-entry';
-      div.style.display='flex';
-      div.style.justifyContent='space-between';
-      div.style.alignItems='center';
-      div.style.padding='8px';
-      div.style.marginBottom='8px';
-      div.style.borderRadius='8px';
-      div.style.background='rgba(255,255,255,0.02)';
-      const left = document.createElement('div');
-      left.innerHTML = `<div style=\"font-weight:700\">${h.name}</div><div style=\"font-size:12px;color:#ccc\">ID: <code>${hid}</code> · TelID: ${h.telegramId||'-'}<br>${h.phone} ${h.zid? '— ' + (state.zones[h.zid]?.name||'') : ''}</div>`;
-      const actions = document.createElement('div');
-      actions.style.display='flex'; actions.style.gap='8px';
-      const del = document.createElement('button'); del.className='btn'; del.textContent='Delete';
-      del.addEventListener('click', ()=> { delete state.helpers[hid]; renderAll(); });
-      const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit';
-      edit.addEventListener('click', ()=> {
-        helperName.value = h.name;
-        helperPhone.value = h.phone;
-        helperTelegram.value = h.telegramId||'';
-        zonesSelect.value = h.zid || '';
-        helperName.dataset.editingId = hid;
-        helperName.focus();
-      });
-      actions.appendChild(edit); actions.appendChild(del);
-      div.appendChild(left); div.appendChild(actions);
-      helpersList.appendChild(div);
-    });
-  }
-
-  function renderZonesForModal(){
-    zoneList.innerHTML = '';
-    const q = zoneSearch.value?.toLowerCase?.() || '';
-    let shown = 0;
-    Object.keys(state.zones).forEach(zid=>{
-      const z = state.zones[zid];
-      if(!z || !z.name) return;
-      if(q && !z.name.toLowerCase().includes(q)) return;
-      const row = document.createElement('div');
-      row.className='zone-row';
-      row.innerHTML = `<div><strong>${z.name}</strong></div>`;
-      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Add';
-      btn.addEventListener('click', ()=> assignZone(zid));
-      row.appendChild(btn);
-      zoneList.appendChild(row);
-      shown++;
-    });
-    if(shown === 0){
-      const empty = document.createElement('div');
-      empty.className = 'zone-row';
-      empty.style.justifyContent = 'center';
-      empty.innerHTML = '<div style="opacity:0.8">No zones available. Open Editor to add zones.</div>';
-      zoneList.appendChild(empty);
-    }
-  }
-
-  function renderCounters(){
-    list1.innerHTML = ''; list2.innerHTML = '';
-
-    const renderEntry = (container, a, counterName)=>{
-      const e = document.createElement('div');
-      e.className='entry';
-      const zoneName = state.zones[a.zid]?.name || a.zid;
-      const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === a.zid);
-      const helper = helperId ? state.helpers[helperId] : null;
-      const helperLine = helper ? `<div style="font-size:12px;color:#ddd;margin-top:4px">${helper.name} · ${helper.phone}</div>` : '';
-
-      const left = document.createElement('div');
-      left.innerHTML = `<div><strong>${zoneName}</strong> — Token ${a.seq}</div>${helperLine}`;
-
-      const right = document.createElement('div');
-      const rm = document.createElement('button');
-      rm.className = 'btn';
-      rm.title = 'Remove';
-      rm.textContent = '×';
-      rm.addEventListener('click', ()=> removeFromCounter(counterName, a.seq));
-      right.appendChild(rm);
-
-      e.style.display = 'flex';
-      e.style.justifyContent = 'space-between';
-      e.style.alignItems = 'center';
-      e.appendChild(left);
-      e.appendChild(right);
-      container.appendChild(e);
-    };
-
-    state.counters.counter1.forEach(a=> renderEntry(list1, a, 'counter1'));
-    state.counters.counter2.forEach(a=> renderEntry(list2, a, 'counter2'));
-  }
-
-  function removeFromCounter(counterName, seq){
-    const idx = state.counters[counterName].findIndex(e=> e.seq === seq);
-    if(idx > -1){
-      const entry = state.counters[counterName][idx];
-      state.counters[counterName].splice(idx,1);
-      const zn = state.zones[entry.zid]?.name || entry.zid;
-      state.activity.push(`${new Date().toLocaleString()} — ${zn} token ${entry.seq} removed from ${counterName}`);
-      renderCounters();
-      renderActivity();
-      try { saveToFirebase(); } catch(e){ console.error('removeFromCounter saveToFirebase', e); }
-    }
-  }
-
-  function renderActivity(){
-    // Only show lines about tokens added/removed
-    const lines = (state.activity || []).slice(-200).reverse();
-    const filtered = lines.filter(l => /\btoken\b/i.test(l) && (/\badded\b/i.test(l) || /\bremoved\b/i.test(l)));
-    if(filtered.length === 0){
-      activityContent.textContent = 'No recent activity yet.';
-    } else {
-      activityContent.innerHTML = filtered.slice(0,50).map(it=>`<div style="margin-bottom:6px;font-size:13px">${it}</div>`).join('');
-    }
-  }
-
-  // renderAll: persists to Firebase automatically
-  function renderAll(){
-    renderZonesInEditor();
-    renderHelpersInEditor();
-    renderCounters();
-    renderActivity();
-    try { saveToFirebase(); } catch(e){ console.error('renderAll saveToFirebase', e); }
-  }
-
-  function renderAllNoSave(){
-    renderZonesInEditor();
-    renderHelpersInEditor();
-    renderCounters();
-    renderActivity();
-  }
-
-  /* -------------------------
-     Interaction: open/close panels and editor
-     ------------------------- */
-  function closePanels(){
-    Object.values(panels).forEach(p=>{
-      p.classList.remove('open');
-      p.classList.add('hidden');
-      p.style.display = 'none';
-      p.setAttribute('aria-hidden','true');
-    });
-  }
-
-  function togglePanel(name){
-    const p = panels[name];
-    if(!p) return;
-    const isOpen = p.classList.contains('open');
-    closePanels();
-    if(!isOpen){
-      p.style.display = 'block';
-      p.classList.remove('hidden');
-      p.classList.add('open');
-      p.setAttribute('aria-hidden','false');
-      const anchorMap = { edit: editIcon, export: exportIcon, activity: activityIcon };
-      positionPanel(p, anchorMap[name]);
-    }
-  }
-
-  // prevent clicks inside panels from closing them
-  Object.values(panels).forEach(p=>{
-    p.addEventListener('click', (ev)=> ev.stopPropagation());
   });
 
-  // Reposition open panel(s) on resize or scroll to keep them under icons
-  function repositionOpenPanels(){
-    Object.entries(panels).forEach(([name, p])=>{
-      if(p.classList.contains('open')){
-        const anchorMap = { edit: editIcon, export: exportIcon, activity: activityIcon };
-        positionPanel(p, anchorMap[name]);
+  zone.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', zone.id);
+    setTimeout(() => zone.style.display = 'none', 0);
+  });
+  zone.addEventListener('dragend', () => zone.style.display = '');
+  if (db) {
+    get(ref(db, 'zones/' + zone.id)).then(snap => {
+      if (!snap.exists()) {
+        set(ref(db, 'zones/' + zone.id), { name: zone.querySelector('.name')?.textContent || zone.id, status: 'pending' });
       }
-    });
+    }).catch(err => console.warn('Error checking zone:', err));
   }
-  window.addEventListener('resize', repositionOpenPanels);
-  window.addEventListener('scroll', repositionOpenPanels);
+}
 
-  editIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('edit'); });
-  exportIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('export'); });
-  activityIcon.addEventListener('click', (e)=>{ e.stopPropagation(); togglePanel('activity'); });
+async function handleDrop(zone, area) {
+  if (!db) {
+    alert('Database not ready. Please refresh the page.');
+    return;
+  }
+  const now = Date.now();
+  let status = 'pending';
+  if (area.classList.contains('bay')) status = 'in-gate';
+  else if (area.id === 'dispatchedZones') status = 'dispatched';
+  else status = 'pending';
 
-  document.addEventListener('click', ()=> closePanels());
+  if (status === 'in-gate') {
+    const seqSnap = await get(ref(db, 'zones/' + zone.id + '/sequenceNumber'));
+    if (!seqSnap.exists() || seqSnap.val() == null) await assignSequenceFirebase(zone.id);
+    await update(ref(db, 'zones/' + zone.id), { status, startTime: now, bayId: area.id });
+  } else if (status === 'dispatched') {
+    const seqSnap = await get(ref(db, 'zones/' + zone.id + '/sequenceNumber'));
+    if (!seqSnap.exists() || seqSnap.val() == null) await assignSequenceFirebase(zone.id);
+    await update(ref(db, 'zones/' + zone.id), { status, dispatchedTime: now, bayId: area.id });
+  } else {
+    await freeSequenceFirebase(zone.id);
+    await update(ref(db, 'zones/' + zone.id), { status, startTime: null, dispatchedTime: null, bayId: null });
+  }
+}
 
-  document.getElementById('closeEditPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
-  document.getElementById('closeExportPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
-  document.getElementById('closeActivityPanelBtn').addEventListener('click', (e)=>{ e.stopPropagation(); closePanels(); });
-  document.getElementById('clearActivityBtn').addEventListener('click', (e)=>{
-    e.stopPropagation();
-    state.activity = [];
-    // Also reset token numbering when clearing activity
-    state.nextSeq = 1;
-    renderActivity();
-    try { saveToFirebase(); } catch(e2){ console.error('clearActivity saveToFirebase', e2); }
+function enableDrop(area) {
+  area.addEventListener('dragover', e => e.preventDefault());
+  area.addEventListener('drop', async e => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    const zone = document.getElementById(id);
+    if (!zone) return;
+    area.appendChild(zone);
+    await handleDrop(zone, area);
   });
+}
+bays.forEach(enableDrop);
+enableDrop(dispatchedArea);
+enableDrop(pendingArea);
 
-  /* -------------------------
-     Editor open from panel button (should NOT close panel)
-     ------------------------- */
-  openEditorBtnSmall.addEventListener('click', (e)=> {
-    e.stopPropagation();
-    closePanels();
-    editorModalBack.style.display = 'flex';
-    renderAll();
+addBtn.addEventListener('click', () => {
+  if (!db) {
+    alert('Database not ready. Please refresh the page.');
+    return;
+  }
+  const name = prompt('Enter new zone name:');
+  if (!name || !name.trim()) return;
+  const id = name.trim().replace(/\s+/g, '_') + '_' + Date.now();
+  const zone = document.createElement('div');
+  zone.className = 'zone';
+  zone.id = id;
+  zone.draggable = true;
+  zone.innerHTML = `<span class="name">${name.trim()}</span>`;
+  pendingArea.appendChild(zone);
+  initZone(zone);
+  set(ref(db, 'zones/' + id), { name: name.trim(), status: 'pending' });
+});
+
+editToggleBtn.addEventListener('click', () => {
+  editMode = !editMode;
+  document.querySelectorAll('.zone').forEach(z => {
+    if (editMode) z.classList.add('show-minus'); else z.classList.remove('show-minus');
   });
+  editToggleBtn.style.background = editMode ? 'rgba(255,255,255,0.12)' : '';
+});
 
-  /* -------------------------
-     Bot token UI
-     ------------------------- */
-  let tokenUnlocked = false;
-  function updateTokenUI(){
-    if(!tokenUnlocked){
-      botTokenInput.disabled = true;
-      botTokenInput.type = 'password';
-      toggleTokenVisibilityBtn.textContent = 'Show';
-      revealTokenBtn.textContent = 'Unlock';
-    } else {
-      botTokenInput.disabled = false;
-      botTokenInput.type = 'text';
-      toggleTokenVisibilityBtn.textContent = 'Hide';
-      revealTokenBtn.textContent = 'Lock';
-    }
+resetBtn.addEventListener('click', async () => {
+  if (!confirm('Reset all zones to pending and restart numbering?')) return;
+  if (!db) {
+    alert('Database not ready. Please refresh the page.');
+    return;
   }
-  function requirePasscode(){
-    const passcode = prompt('Enter passcode to unlock bot token');
-    return passcode === '923623';
+  await set(ref(db, 'meta/nextSequence'), 0);
+  await set(ref(db, 'meta/freeNumbers'), []);
+  const snap = await get(ref(db, 'zones'));
+  if (!snap.exists()) return;
+  const zonesObj = snap.val();
+  const updates = {};
+  for (const id in zonesObj) {
+    if (zonesObj[id] && zonesObj[id].deleted) continue;
+    updates['zones/' + id + '/status'] = 'pending';
+    updates['zones/' + id + '/startTime'] = null;
+    updates['zones/' + id + '/dispatchedTime'] = null;
+    updates['zones/' + id + '/bayId'] = null;
+    updates['zones/' + id + '/sequenceNumber'] = null;
   }
-  try { BOT_TOKEN = localStorage.getItem('dispatch_bot_token') || ''; } catch(_){}
-  if(BOT_TOKEN && botTokenInput){ botTokenInput.value = BOT_TOKEN; }
-  updateTokenUI();
+  await update(ref(db, '/'), updates);
+});
 
-  saveBotTokenBtn?.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    if(!tokenUnlocked && !requirePasscode()) return;
-    tokenUnlocked = true;
-    BOT_TOKEN = botTokenInput.value.trim();
-    try { localStorage.setItem('dispatch_bot_token', BOT_TOKEN); } catch(_){ }
-    saveBotTokenToFirebase(BOT_TOKEN).catch(()=>{});
-    updateTokenUI();
-  });
-  toggleTokenVisibilityBtn?.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    if(!tokenUnlocked && !requirePasscode()) return;
-    tokenUnlocked = true;
-    if(!botTokenInput) return;
-    const isPwd = botTokenInput.type === 'password';
-    botTokenInput.type = isPwd ? 'text' : 'password';
-    toggleTokenVisibilityBtn.textContent = isPwd ? 'Hide' : 'Show';
-    updateTokenUI();
-  });
-  revealTokenBtn?.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    if(!tokenUnlocked){
-      if(!requirePasscode()) return;
-      tokenUnlocked = true;
-    } else {
-      tokenUnlocked = false;
-    }
-    updateTokenUI();
-  });
+/* ---------------------------
+   CSV export (unchanged)
+*/
+downloadBtn.addEventListener('click', async () => {
+  if (!db) {
+    alert('Database not ready. Please refresh the page.');
+    return;
+  }
+  const snap = await get(ref(db, 'zones'));
+  const obj = snap.exists() ? snap.val() : {};
+  const rows = [
+    [
+      'zoneId',
+      'name',
+      'status',
+      'bayId',
+      'inGateStart_iso',
+      'inGateStart_date_UAE',
+      'inGateStart_time_UAE',
+      'inGateDuration_HH:MM:SS',
+      'dispatchedTime_iso',
+      'dispatched_date_UAE',
+      'dispatched_time_UAE',
+      'sequenceNumber'
+    ]
+  ];
 
-  /* -------------------------
-     Telegram send (proxy via Google Apps Script preferred)
-     - Single-send guarantee using 'sentSet'
-     ------------------------- */
-
-  // read configured Apps Script URL
-  function getAppsScriptUrl(){
-    try {
-      const u = localStorage.getItem(PROXY_CONFIG_KEY);
-      if(u && typeof u === 'string' && u.trim()) return u.trim();
-    } catch(e){}
-    return '';
+  function msToHms(ms) {
+    if (ms == null) return '';
+    const total = Math.floor(ms / 1000);
+    const hours = Math.floor(total / 3600);
+    const mins = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
   }
 
-  // persist sentSet (rolloff older entries to keep small)
-  function persistSentSet(){
-    try {
-      const arr = Array.from(sentSet).slice(-200); // keep last 200
-      localStorage.setItem(SENT_SET_KEY, JSON.stringify(arr));
-    } catch(e){}
-  }
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' });
+  const timeFormatter = new Intl.DateTimeFormat('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Dubai' });
 
-  async function sendViaAppsScript(appsUrl, botToken, chatId, text){
-    try {
-      const resp = await fetch(appsUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ botToken, chatId, text }),
-        mode: 'cors',
-        cache: 'no-cache'
-      });
-      return resp && (resp.ok || resp.status === 200 || resp.status === 204);
-    } catch(e){
-      return false;
-    }
-  }
+  for (const id in obj) {
+    const z = obj[id];
+    if (!z || z.deleted) continue;
 
-  // fallback direct beacon (single request to avoid duplicate messages)
-  function sendDirectBeacon(botToken, chatId, text){
-    if(!botToken || !chatId) return;
-    const url = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encodeURIComponent(text)}`;
-    try {
-      fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' }).catch(()=>{});
-    } catch(e){}
-  }
+    const name = z.name || '';
+    const status = z.status || '';
+    const bayId = z.bayId || '';
 
-  // single function that ensures single send
-  async function sendTelegramMessageSingle(chatId, text, uniqueKey){
-    if(!chatId || !text) return;
-    if(!BOT_TOKEN) {
-      try { BOT_TOKEN = localStorage.getItem('dispatch_bot_token') || ''; } catch(_){}
-      if(!BOT_TOKEN) return;
-    }
-    // if we already sent this uniqueKey recently, skip
-    if(sentSet.has(uniqueKey)) return;
-    // mark as sent (optimistic) to prevent re-send during network retries
-    sentSet.add(uniqueKey);
-    persistSentSet();
+    const inMs = z.startTime != null ? z.startTime : null;
+    const inIso = inMs ? new Date(inMs).toISOString() : '';
 
-    // try Apps Script proxy first
-    const appsUrl = getAppsScriptUrl();
-    if(appsUrl){
-      const ok = await sendViaAppsScript(appsUrl, BOT_TOKEN, chatId, text);
-      if(ok) return;
-      // if not ok, remove the optimistic mark so fallback attempts can try later
-      // but keep duplicate protection for a short time (we'll still remove)
+    let inGateDur = '';
+    if (z.startTime != null && z.dispatchedTime != null) {
+      inGateDur = msToHms(z.dispatchedTime - z.startTime);
     }
 
-    // fallback to direct beacon
-    sendDirectBeacon(BOT_TOKEN, chatId, text);
-  }
+    const dispMs = z.dispatchedTime != null ? z.dispatchedTime : null;
+    const dispIso = dispMs ? new Date(dispMs).toISOString() : '';
 
-  function normalizeUaePhone(input){
-    let s = (input||'').replace(/\D+/g,'');
-    if(!s) return input;
-    if(s.startsWith('971')) return `+${s}`;
-    if(s.startsWith('0')) s = s.substring(1);
-    if(s.startsWith('5')) return `+971${s}`;
-    return `+971${s}`;
-  }
-
-  document.getElementById('closeEditorBtn').addEventListener('click', ()=> {
-    editorModalBack.style.display = 'none';
-  });
-
-  // clicking inside editor should not close it
-  document.querySelector('#editorModalBack .modal')?.addEventListener?.('click', e=> e.stopPropagation?.());
-
-  // clicking modal backdrop closes the editor
-  editorModalBack.addEventListener('click', (e)=> {
-    if(e.target === editorModalBack) editorModalBack.style.display = 'none';
-  });
-
-  /* -------------------------
-     Zone modal open/close (counters)
-     ------------------------- */
-  let activeCounter = null;
-  document.querySelectorAll('.plus').forEach(b=>{
-    b.addEventListener('click', (ev)=> {
-      ev.stopPropagation();
-      activeCounter = b.getAttribute('data-counter');
-      modalBack.style.display='flex';
-      zoneSearch.value = '';
-      renderZonesForModal();
-    });
-  });
-  document.getElementById('modalCancel').addEventListener('click', ()=> modalBack.style.display='none');
-  modalBack.addEventListener('click', (e)=> { if(e.target === modalBack) modalBack.style.display='none'; });
-  zoneSearch.addEventListener('input', renderZonesForModal);
-
-  /* -------------------------
-     Assign zone -> counter (and send message)
-     ------------------------- */
-  function assignZone(zid){
-    const seq = state.nextSeq++;
-    state.counters[activeCounter].push({ zid, seq });
-    modalBack.style.display='none';
-    renderCounters();
-
-    const helperId = Object.keys(state.helpers).find(hk => state.helpers[hk].zid === zid);
-    const helper = helperId ? state.helpers[helperId] : null;
-
-    const payload = {
-      counter: activeCounter,
-      zone: state.zones[zid].name,
-      zoneId: zid,
-      token: seq,
-      helper: helper ? { id: helperId, name: helper.name, phone: helper.phone, telegramId: helper.telegramId||'' } : null,
-      timestamp: new Date().toISOString()
-    };
-
-    // activity: only log add
-    state.activity.push(`${new Date().toLocaleString()} — ${payload.zone} token ${payload.token} added to ${payload.counter}`);
-    renderActivity();
-
-    // Send Telegram message once (proxy-first). Use uniqueKey to prevent duplicates
-    if(helper && helper.telegramId){
-      const msg = `${helper.name} Please come to ${payload.counter.replace('counter','Counter ')} — ${payload.zone} — Token ${payload.token}`;
-      const uniqueKey = `${payload.zoneId}_${payload.token}_${payload.counter}`;
-      // send asynchronously but single-shot
-      sendTelegramMessageSingle(helper.telegramId, msg, uniqueKey).catch(()=>{});
+    let inDateUAE = '';
+    let inTimeUAE = '';
+    if (inMs != null) {
+      try {
+        inDateUAE = dateFormatter.format(new Date(inMs));
+        inTimeUAE = timeFormatter.format(new Date(inMs));
+      } catch (e) { inDateUAE = ''; inTimeUAE = ''; }
     }
 
-    // persist after assignment
-    try { saveToFirebase(); } catch(e){ console.error('assignZone saveToFirebase', e); }
+    let dispDateUAE = '';
+    let dispTimeUAE = '';
+    if (dispMs != null) {
+      try {
+        dispDateUAE = dateFormatter.format(new Date(dispMs));
+        dispTimeUAE = timeFormatter.format(new Date(dispMs));
+      } catch (e) { dispDateUAE = ''; dispTimeUAE = ''; }
+    }
+
+    const seq = z.sequenceNumber != null ? z.sequenceNumber : '';
+
+    rows.push([
+      `"${id.replace(/"/g, '""')}"`,
+      `"${(name||'').replace(/"/g, '""')}"`,
+      `"${(status||'').replace(/"/g, '""')}"`,
+      `"${(bayId||'').replace(/"/g, '""')}"`,
+      `"${inIso}"`,
+      `"${inDateUAE}"`,
+      `"${inTimeUAE}"`,
+      `"${inGateDur}"`,
+      `"${dispIso}"`,
+      `"${dispDateUAE}"`,
+      `"${dispTimeUAE}"`,
+      seq
+    ]);
   }
 
-  /* -------------------------
-     Editor: add zone & helpers
-     ------------------------- */
-  addZoneBtn.addEventListener('click', ()=> {
-    const name = (newZoneName.value||'').trim();
-    if(!name) return alert('Enter zone name');
-    if(!Number.isFinite(state.nextZoneId)) state.nextZoneId = 1;
-    const zid = 'z' + (state.nextZoneId++);
-    state.zones[zid] = { name };
-    newZoneName.value = '';
-    renderAll();
-  });
+  const csv = rows.map(r => r.join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
 
-  addHelperBtn.addEventListener('click', ()=> {
-    const name = (helperName.value||'').trim();
-    let phone = (helperPhone.value||'').trim();
-    const telegramId = (helperTelegram.value||'').trim();
-    const zid = zonesSelect.value || '';
-    if(!name || !phone) return alert('Enter helper name & phone');
-    phone = normalizeUaePhone(phone);
-    const editingId = helperName.dataset.editingId;
-    if(editingId){
-      const newId = prompt('Helper ID (optional to change):', editingId) || editingId;
-      const finalId = newId.trim();
-      if(finalId !== editingId && state.helpers[finalId]){ alert('Helper ID already exists'); return; }
-      delete state.helpers[editingId];
-      state.helpers[finalId] = { name, phone, telegramId, zid };
-      delete helperName.dataset.editingId;
-    } else {
-      const hid = 'h' + (state.nextHelperId++);
-      state.helpers[hid] = { name, phone, telegramId, zid };
-    }
-    helperName.value = ''; helperPhone.value = ''; helperTelegram.value=''; zonesSelect.value = '';
-    renderAll();
-  });
+  let dateStr = new Date().toLocaleDateString('en-CA');
+  if (!dateStr) dateStr = new Date().toISOString().slice(0,10);
+  dateStr = String(dateStr).replace(/\//g,'-');
+  const filename = `dispatch_report_${dateStr}.csv`;
 
-  // Export CSV (simple)
-  document.getElementById('exportCsvBtn').addEventListener('click', (e)=> {
-    e.stopPropagation();
-    let csv = 'type,id,name,extra\n';
-    Object.keys(state.zones).forEach(zid=> csv += `zone,${zid},"${state.zones[zid].name}",\n`);
-    Object.keys(state.helpers).forEach(hid=> csv += `helper,${hid},"${state.helpers[hid].name}","${state.helpers[hid].phone}|${state.helpers[hid].telegramId||''}|${state.helpers[hid].zid||''}"\n`);
-    Object.keys(state.counters).forEach(cnt=>{
-      state.counters[cnt].forEach(entry=>{
-        csv += `counter,${cnt},"${state.zones[entry.zid]?.name||entry.zid}","token:${entry.seq}"\n`;
-      });
-    });
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'dispatch_export.csv'; document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
 
-  /* -------------------------
-     Sample seed data (only if DB empty)
-     ------------------------- */
-  (function seedAndLoadFirebase(){
-    loadFromFirebaseOnce().then(remote=>{
-      if(remote){
-        try {
-          Object.keys(state).forEach(k => delete state[k]);
-          Object.assign(state, remote || {});
-          ensureStateShape();
-        } catch(e){ console.error('apply remote on load', e); }
-        renderAllNoSave();
+// Set up Firebase listener - only if db is initialized
+if (db) {
+  onValue(ref(db, 'zones/'), snapshot => {
+    const data = snapshot.val() || {};
+    for (const id in data) {
+      const zData = data[id] || {};
+      let zone = document.getElementById(id);
+
+      if (zData.deleted) {
+        if (zone && zone.parentNode) zone.remove();
+        continue;
+      }
+
+      if (!zone) {
+        zone = document.createElement('div');
+        zone.className = 'zone';
+        zone.id = id;
+        zone.draggable = true;
+        zone.innerHTML = `<span class="name">${zData.name || id}</span>`;
+        pendingArea.appendChild(zone);
       } else {
-        const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
-        const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
-        const z3 = 'z' + (state.nextZoneId++); state.zones[z3] = { name:'Sharjah' };
-        renderAll();
-        try { saveToFirebase(); } catch(e){ console.error('seed saveToFirebase', e); }
+        const ns = zone.querySelector('.name');
+        if (ns && zData.name) ns.textContent = zData.name;
       }
-    }).catch(e=> {
-      console.error('seedAndLoadFirebase error', e);
-      const z1 = 'z' + (state.nextZoneId++); state.zones[z1] = { name:'Ajman' };
-      const z2 = 'z' + (state.nextZoneId++); state.zones[z2] = { name:'Dubai' };
-      const z3 = 'z' + (state.nextZoneId++); state.zones[z3] = { name:'Sharjah' };
-      renderAll();
+      initZone(zone);
+
+      if (zData.status === 'pending') {
+        pendingArea.appendChild(zone);
+        zone.querySelector('.timer')?.style && (zone.querySelector('.timer').style.display = 'none');
+        zone.querySelector('.dispatched-time')?.style && (zone.querySelector('.dispatched-time').style.display = 'none');
+      } else if (zData.status === 'in-gate') {
+        const bay = document.getElementById(zData.bayId) || bays[0];
+        bay.appendChild(zone);
+        if (zData.startTime) {
+          const timerEl = zone.querySelector('.timer');
+          timerEl.style.display = 'block';
+          if (zone.dataset.interval) clearInterval(zone.dataset.interval);
+          const startTime = zData.startTime;
+          const interval = setInterval(() => {
+            const diff = Math.floor((Date.now() - startTime) / 1000);
+            const mins = Math.floor(diff / 60), secs = diff % 60;
+            timerEl.textContent = `⏱ ${mins}m ${secs}s`;
+          }, 1000);
+          zone.dataset.interval = interval;
+        }
+      } else if (zData.status === 'dispatched') {
+        dispatchedArea.appendChild(zone);
+        if (zData.dispatchedTime) {
+          const dispEl = zone.querySelector('.dispatched-time');
+          dispEl.style.display = 'block';
+          dispEl.textContent = `(Dispatched at: ${new Date(zData.dispatchedTime).toLocaleTimeString()})`;
+        }
+        if (zone.dataset.interval) { clearInterval(zone.dataset.interval); delete zone.dataset.interval; }
+      }
+
+      const badge = zone.querySelector('.seq-badge');
+      if (zData.sequenceNumber != null) {
+        badge.style.display = 'flex';
+        badge.textContent = zData.sequenceNumber;
+      } else {
+        badge.style.display = 'none';
+        badge.textContent = '';
+      }
+    }
+
+    document.querySelectorAll('.zone').forEach(z => {
+      if (data[z.id] && data[z.id].deleted) return;
+      if (!data[z.id] && db) {
+        const nm = z.querySelector('.name')?.textContent || z.id;
+        set(ref(db, 'zones/' + z.id), { name: nm, status: 'pending' });
+      }
     });
-  })();
 
-  /* -------------------------
-     Keyboard focus / a11y: focus counters when page loads
-     ------------------------- */
-  const countersArea = document.getElementById('countersArea');
-  setTimeout(()=> { countersArea.scrollIntoView({behavior:'smooth', block:'center'}); }, 120);
+    document.querySelectorAll('.zone').forEach(z => {
+      if (editMode) z.classList.add('show-minus'); else z.classList.remove('show-minus');
+    });
+  });
+} else {
+  console.error('Firebase database not initialized. Please refresh the page.');
+  setTimeout(() => {
+    if (document.getElementById('loginOverlay') && document.getElementById('loginOverlay').style.display === 'none') {
+      alert('Database connection failed. Please refresh the page. If the problem persists, check your internet connection and try clearing your browser cache.');
+    }
+  }, 2000);
+}
 
-  /* -------------------------
-     Prevent accidental closing while interacting with panels
-     ------------------------- */
-  document.getElementById('topControls').addEventListener('click', e=> e.stopPropagation());
-
-  /* -------------------------
-     Finish: initial render
-     ------------------------- */
-  // initial render handled in seed/load
-}); // DOMContentLoaded
+// startApp function - ensure everything is initialized
+function startApp() {
+  if (appStarted) return;
+  appStarted = true;
+  console.log('App started successfully');
+}
 </script>
 </body>
 </html>
