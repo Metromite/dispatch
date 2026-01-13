@@ -878,12 +878,29 @@ if (db) {
         }
       } else if (zData.status === 'dispatched') {
         dispatchedArea.appendChild(zone);
-        if (zData.dispatchedTime) {
-          const dispEl = zone.querySelector('.dispatched-time');
-          dispEl.style.display = 'block';
-          dispEl.textContent = `(Dispatched at: ${new Date(zData.dispatchedTime).toLocaleTimeString()})`;
+        const dispEl = zone.querySelector('.dispatched-time');
+        dispEl.style.display = 'block';
+        
+        // Format the dispatched time
+        const dispatchedTime = zData.dispatchedTime ? new Date(zData.dispatchedTime) : new Date();
+        const timeStr = `Dispatched at: ${dispatchedTime.toLocaleTimeString()}`;
+        
+        // Calculate time spent in dispatch bay if startTime is available
+        let timeInBay = '';
+        if (zData.startTime && zData.dispatchedTime) {
+            const durationMs = zData.dispatchedTime - zData.startTime;
+            const durationSec = Math.floor(durationMs / 1000);
+            const mins = Math.floor(durationSec / 60);
+            const secs = durationSec % 60;
+            timeInBay = ` | Time in Bay: ${mins}m ${secs}s`;
         }
-        if (zone.dataset.interval) { clearInterval(zone.dataset.interval); delete zone.dataset.interval; }
+        
+        dispEl.textContent = `${timeStr}${timeInBay}`;
+        
+        if (zone.dataset.interval) { 
+            clearInterval(zone.dataset.interval); 
+            delete zone.dataset.interval; 
+        }
       }
 
       const badge = zone.querySelector('.seq-badge');
